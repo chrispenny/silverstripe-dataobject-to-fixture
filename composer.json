@@ -1,0 +1,36 @@
+{
+  "name": "chrispenny/silverstripe-data-object-to-fixture",
+  "description": "Generate YML fixture for DataObjects",
+  "type": "silverstripe-vendormodule",
+  "keywords": [
+    "fixture", "fixtures", "yml", "dataobject"
+  ],
+  "license": "BSD-3-Clause",
+  "authors": [
+    {
+      "name": "Christopher David Penny",
+      "email": "chris.penny@gmail.com"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/chrispenny/silverstripe-data-object-to-fixture/issues"
+  },
+  "require": {
+    "php": "^7.1",
+    "silverstripe/vendor-plugin": "^1.0",
+    "silverstripe/framework": "^4@dev",
+    "silverstripe/cms": "^4@dev"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^5.7",
+    "tractorcow/silverstripe-fluent": "^4.2.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "ChrisPenny\\DataObjectToFixture\\": "src/",
+      "ChrisPenny\\DataObjectToFixture\\Tests\\": "tests/"
+    }
+  },
+  "prefer-stable": true,
+  "minimum-stability": "dev"
+}
