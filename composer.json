@@ -1,6 +1,6 @@
 {
   "name": "chrispenny/silverstripe-data-object-to-fixture",
-  "description": "Generate YML fixture for DataObjects",
+  "description": "Generate YAML fixture for DataObjects",
   "type": "silverstripe-vendormodule",
   "keywords": [
     "fixture", "fixtures", "yml", "dataobject"

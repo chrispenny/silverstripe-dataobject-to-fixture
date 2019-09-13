@@ -1,0 +1,14 @@
+---
+Name: dataobjecttofixturemodel
+---
+SilverStripe\Security\Member:
+  exclude_from_fixture_relationships: 1
+
+SilverStripe\Security\Group:
+  exclude_from_fixture_relationships: 1
+
+SilverStripe\Security\MemberPassword:
+  exclude_from_fixture_relationships: 1
+
+SilverStripe\Security\RememberLoginHash:
+  exclude_from_fixture_relationships: 1
