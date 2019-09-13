@@ -83,3 +83,9 @@ It is my intention to support Fluent and exporting Localised fields.
 
 Current state *does* support this, but, again, this is still very early development, so you should be validating
 everything before you just go right ahead and assume it's perfect.
+
+## Future features
+
+- Add the option/ability to store binary files so that they can be restored with the fixture.
+- Move to using ArrayList instead of arrays (probably). 
+- Let me know what else you'd like!
