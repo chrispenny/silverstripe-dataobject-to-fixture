@@ -2,6 +2,8 @@
 
 namespace ChrisPenny\DataObjectToFixture\ORM;
 
+use SilverStripe\Core\Injector\Injectable;
+
 /**
  * Class Group
  *
@@ -9,6 +11,8 @@ namespace ChrisPenny\DataObjectToFixture\ORM;
  */
 class Group
 {
+    use Injectable;
+
     /**
      * @var string
      */
@@ -48,6 +52,23 @@ class Group
         return $this->priority;
     }
 
+    public function resetPriority(): void
+    {
+        $this->priority = 0;
+    }
+
+    /**
+     * @param int $priority
+     */
+    public function updateToHighestPriority(int $priority): void
+    {
+        if ($priority <= $this->priority) {
+            return;
+        }
+
+        $this->priority = $priority;
+    }
+
     /**
      * @return array|Record[]
      */
@@ -70,29 +91,11 @@ class Group
     }
 
     /**
-     * @param mixed $id
-     * @return Record
+     * @param Record $record
      */
-    public function findOrCreateRecordByID($id): Record
+    public function addRecord(Record $record): void
     {
-        $record = $this->getRecordByID($id);
-        if ($record !== null) {
-            return $record;
-        }
-
-        return $this->createRecord($id);
-    }
-
-    /**
-     * @param int $priority
-     */
-    public function updateHighestPriority(int $priority): void
-    {
-        if ($priority <= $this->priority) {
-            return;
-        }
-
-        $this->priority = $priority;
+        $this->records[$record->getId()] = $record;
     }
 
     /**
@@ -115,18 +118,5 @@ class Group
     public function isNew(): bool
     {
         return count($this->records) === 0;
-    }
-
-    /**
-     * @param mixed $id
-     * @return Record
-     */
-    protected function createRecord($id): Record
-    {
-        $record = new Record($id);
-
-        $this->records[$id] = $record;
-
-        return $record;
     }
 }

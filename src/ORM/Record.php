@@ -2,6 +2,8 @@
 
 namespace ChrisPenny\DataObjectToFixture\ORM;
 
+use SilverStripe\Core\Injector\Injectable;
+
 /**
  * Class Record
  *
@@ -9,6 +11,8 @@ namespace ChrisPenny\DataObjectToFixture\ORM;
  */
 class Record
 {
+    use Injectable;
+
     /**
      * @var int|string|null
      */
@@ -51,6 +55,25 @@ class Record
     public function addFieldValue(string $fieldName, $value): Record
     {
         $this->fields[$fieldName] = $value;
+        return $this;
+    }
+
+    /**
+     * @param string $forClass
+     * @return Record
+     */
+    public function removeRelationshipValueForClass(string $forClass): Record
+    {
+        foreach ($this->fields as $fieldName => $fieldValue) {
+            $pattern = sprintf('/=>%s.[0-9]+/', addslashes($forClass));
+
+            if (!preg_match($pattern, $fieldValue)) {
+                continue;
+            }
+
+            unset($this->fields[$fieldName]);
+        }
+
         return $this;
     }
 
