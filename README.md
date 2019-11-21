@@ -14,24 +14,25 @@ Use at your own risk.
 ## Usage
 
 ```php
-// Instantiate a new Manifest.
-$manifest = new Manifest();
+// Instantiate the Service.
+$service = new FixtureService();
 
 // Fetch the DataObject that you wish to generate a fixture for.
 /** @var Page $page */
 $page = Page::get()->byID(1);
 
-// Check for warnings?
-if (count($manifest->getWarnings() > 0) {
-    Debug::dump($manifest->getWarnings());
+// Check for warnings? This is somewhat important, because if you have looping relationships (which we have no way of
+// creating fixtures for at the moment) this is how you'll know about it.
+if (count($service->getWarnings() > 0) {
+    Debug::dump($service->getWarnings());
 }
 
 // Do something with the fixture output.
-highlight_string($manifest->outputFixture());
+highlight_string($service->outputFixture());
 
 // Or maybe save the output to a file?
 $fixture = Director::baseFolder() . '/app/resources/fixture.yml';
-file_put_contents($fixture, $manifest->outputFixture());
+file_put_contents($fixture, $service->outputFixture());
 ```
 
 ## Excluding classes from export
@@ -73,9 +74,8 @@ SilverStripe\Security\Member:
 
 ## Unsupported relationships
 
-- `many_many` where **no** `through` relationship has been defined.
-
-You should be using `through`.... Use `through`.
+- `many_many` where **no** `through` relationship has been defined (you should be using `through`.... Use `through`).
+- `has_one` relationships that result in a loop of relationships.
 
 ## Fluent support
 
