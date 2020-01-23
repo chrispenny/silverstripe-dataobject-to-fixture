@@ -2,16 +2,41 @@
 
 Generate a YAML fixture from DataObjects
 
+## Purpose (early stage)
+
+The purpose of this module (at this early stage) is not to create perfect fixtures, but more to provide a solid
+guideline for what your fixture should look like.
+
+For example:
+Writing unit test fixtures can be difficult, especially when you're needing to visualise the structure and relationships
+of many different DataObjects (and then add an extra layer if you're using, say, Fluent).
+
+## Purpose (future development)
+
+One goal for the future of this module is for it to work in tandem with the Populate module. I would like to get to a
+stage where content authors are able to (for example) "export pages" through the CMS, so that those pages can then be
+recreated via Populate (without a dev needing to create the fixture themselves).
+
 ## Warnings
 
 This is in very, very early development stages (this is basically an ugly first draft). Please be aware that:
 
 - Namespaces might change
 - Classes might change
+- Entire paradigms on how I generate the fixtures might change
 
-Use at your own risk.
+I would not recommend that you use this module (at this stage) for any application critical features, but I **would**
+recommend that you use it as a developer tool (to help you write your own fixtures, either for tests, or to be used
+with Populate).
 
-## Usage
+## Dev task
+
+A dev task can be found at `/chrispenny/silverstripe-data-object-to-fixture`.
+
+This task will allow you to generate a fixture (output on the screen for you to copy/paste) for any DataObject that
+you have defined in your project.
+
+## General usage
 
 ```php
 // Instantiate the Service.
@@ -20,6 +45,9 @@ $service = new FixtureService();
 // Fetch the DataObject that you wish to generate a fixture for.
 /** @var Page $page */
 $page = Page::get()->byID(1);
+
+// Add the DataObject to the Service.
+$service->addDataObject($dataObject);
 
 // Check for warnings? This is somewhat important, because if you have looping relationships (which we have no way of
 // creating fixtures for at the moment) this is how you'll know about it.
@@ -75,7 +103,9 @@ SilverStripe\Security\Member:
 ## Unsupported relationships
 
 - `many_many` where **no** `through` relationship has been defined (you should be using `through`.... Use `through`).
-- `has_one` relationships that result in a loop of relationships.
+- `has_one` relationships that result in a loop of relationships (`belongs_to` is the "backward" definition for a
+`has_one` relationship, unfortunately, this is not currently supported in fixtures, so, we have no way to create a
+fixture for relationships that loop).
 
 ## Fluent support
 
@@ -89,3 +119,11 @@ everything before you just go right ahead and assume it's perfect.
 - Add the option/ability to store binary files so that they can be restored with the fixture.
 - Move to using ArrayList instead of arrays (probably). 
 - Let me know what else you'd like!
+
+## Things that this module does not currently do
+
+- Export `_Live` tables. I hope to add `_Live` table exports soon(ish).
+- There is no ordering logic within definitions for a class. This means that if one class record has a
+relationship to another, we might not get the order in the fixture correct.
+- Support for exporting/saving away Asset binary files has not been added. This means that in the current state, you can
+only generate the database record for an Asset.

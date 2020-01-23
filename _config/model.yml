@@ -1,5 +1,5 @@
 ---
-Name: dataobjecttofixturemodel
+Name: dataobjecttofixture_model
 ---
 SilverStripe\Security\Member:
   exclude_from_fixture_relationships: 1
