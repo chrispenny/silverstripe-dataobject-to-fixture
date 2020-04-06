@@ -2,6 +2,19 @@
 
 Generate a YAML fixture from DataObjects
 
+- [Purpose (early stage)](#purpose-(early-stage))
+- [Purpose (future development)](#purpose-(future-development))
+- [Warnings](#warnings)
+- [Dev task](#dev-task)
+- [General usage](#general-usage)
+- [Excluding classes from export](#excluding-classes-from-export)
+- [Common errors](#common-errors)
+- [Supported relationships](#supported-relationships)
+- [Unsupported relationships](#unsupported-relationships)
+- [Fluent support](#fluent-support)
+- [Future features](#future-features)
+- [Things that this module does not currently do](#things-that-this-module-does-not-currently-do)
+
 ## Purpose (early stage)
 
 The purpose of this module (at this early stage) is not to create perfect fixtures, but more to provide a solid
@@ -19,7 +32,7 @@ recreated via Populate (without a dev needing to create the fixture themselves).
 
 ## Warnings
 
-This is in very, very early development stages (this is basically an ugly first draft). Please be aware that:
+This is in very, very early development stages. Please be aware that:
 
 - Namespaces might change
 - Classes might change
@@ -94,6 +107,38 @@ SilverStripe\Security\Member:
   exclude_from_fixture_relationships: 0
 ```
 
+## Common errors
+
+### DataObject::get() cannot query non-subclass DataObject directly
+
+You might see this error if you have a relationship being defined as simply `DataObject::class`, EG:
+
+```php
+private static $has_one = [
+    'Parent' => DataObject::class,
+];
+```
+
+This module needs to know what `DataObject` it is querying for. Modules like Userforms do this because you can
+technically have any Model as the parent. These modules do, however, store the class name for this relationship in
+a separate field so that we are able to query for the parent appropriately. For Userforms, the class name for this
+relationship is stored in a field called `ParentClass`. This module doesn't know that though.
+
+You can tell this module where that class name information lives for any relationship by using the following
+configuration (this is using Userforms as the example):
+
+```php
+SilverStripe\UserForms\Model\EditableFormField:
+  field_classname_map:
+    ParentID: ParentClass
+```
+
+`field_classname_map` is the config we want to populate, and it expects an array with the relationship field name as the
+`key`, and the corresponding class name field as the `value`.
+
+The module uses `relField()` with the `value`, so you could be presenting this information through a data field, or a
+method.
+
 ## Supported relationships
 
 - `has_one`
@@ -117,13 +162,12 @@ everything before you just go right ahead and assume it's perfect.
 ## Future features
 
 - Add the option/ability to store binary files so that they can be restored with the fixture.
-- Move to using ArrayList instead of arrays (probably). 
 - Let me know what else you'd like!
 
 ## Things that this module does not currently do
 
 - Export `_Live` tables. I hope to add `_Live` table exports soon(ish).
-- There is no ordering logic within definitions for a class. This means that if one class record has a
-relationship to another, we might not get the order in the fixture correct.
+- There is no ordering logic for records within the same class. This means that if you have classes that can have
+relationships to itself, the order or records might not be correct.
 - Support for exporting/saving away Asset binary files has not been added. This means that in the current state, you can
 only generate the database record for an Asset.

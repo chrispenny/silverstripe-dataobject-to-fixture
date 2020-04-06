@@ -10,6 +10,7 @@ use ChrisPenny\DataObjectToFixture\ORM\Record;
 use Exception;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
@@ -230,6 +231,11 @@ class FixtureService
 
         foreach ($hasOneRelationships as $fieldName => $relationClassName) {
             $relationFieldName = sprintf('%sID', $fieldName);
+            $fieldClassNameMap = $dataObject->config()->get('field_classname_map');
+
+            if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
+                $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
+            }
 
             // This class has requested that it not be included in relationship maps.
             $exclude = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
@@ -249,6 +255,7 @@ class FixtureService
             }
 
             $relatedObjectID = (int) $dataObject->{$relationFieldName};
+
             $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
 
             // We expect the relationship to be a DataObject.
