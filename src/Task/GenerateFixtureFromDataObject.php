@@ -110,6 +110,8 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
+        echo '<p><a href="/dev/tasks/generate-fixture-from-dataobject">< Back to the beginning</a></p>';
+
         echo '<p>Please select the record you wish to generate the fixture for below</p>';
 
         // Remove Datatime and Boolean fields, as they're (likely) not that useful for trying to find a specific record
@@ -187,7 +189,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         }
 
         echo sprintf(
-            '<p><a href="/dev/tasks/generate-fixture-from-dataobject?ClassName=%s">Back to list of records</a></p>',
+            '<p><a href="/dev/tasks/generate-fixture-from-dataobject?ClassName=%s">< Back to list of records</a></p>',
             $className
         );
 
