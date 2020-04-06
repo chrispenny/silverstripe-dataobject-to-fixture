@@ -38,6 +38,10 @@ This is in very, very early development stages. Please be aware that:
 - Classes might change
 - Entire paradigms on how I generate the fixtures might change
 
+What won't change:
+
+- The public API will not change. There will still be a service with those 3 main methods.
+
 I would not recommend that you use this module (at this stage) for any application critical features, but I **would**
 recommend that you use it as a developer tool (to help you write your own fixtures, either for tests, or to be used
 with Populate).
