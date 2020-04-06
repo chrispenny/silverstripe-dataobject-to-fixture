@@ -191,7 +191,7 @@ class GenerateFixtureFromDataObject extends BuildTask
             $className
         );
 
-        $service = new FixtureService();
+        $service = FixtureService::create();
         $service->addDataObject($dataObject);
 
         echo '<p>Warnings:</p>';
