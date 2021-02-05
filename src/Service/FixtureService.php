@@ -48,6 +48,21 @@ class FixtureService
      */
     private $warnings = [];
 
+    /**
+     * @var DataObject
+     */
+    private $rootDataObject;
+
+    /**
+     * @var bool
+     */
+    private $addRelations = true;
+
+    /**
+     * @var bool
+     */
+    private $addNestedRelations = true;
+
     public function __construct()
     {
         $this->fixtureManifest = new FixtureManifest();
@@ -62,7 +77,16 @@ class FixtureService
     public function addDataObject(DataObject $dataObject): FixtureService
     {
         if (!$dataObject->exists()) {
-            throw new Exception('Your DataObject must be in the DB');
+            if (!$this->rootDataObject) {
+                throw new Exception('Your DataObject of class ' . get_class($dataObject) . ' must be in the DB');
+            }
+            // Skip any invalid relation
+            return $this;
+        }
+
+        // Track root DataObject to see if we are in a nested call
+        if (!$this->rootDataObject) {
+            $this->rootDataObject = $dataObject;
         }
 
         // Any time we add a new DataObject, we need to set validated back to false.
@@ -89,15 +113,17 @@ class FixtureService
         $this->relationshipManifest->addGroup($group);
         // Add the standard DB fields for this record
         $this->addDataObjectDBFields($dataObject);
-        // Add direct relationships.
-        $this->addDataObjectHasOneFields($dataObject);
-        // Add belongs to relationships.
-        $this->addDataObjectBelongsToFields($dataObject);
-        // has_many fields will include any relationships that you're created using many_many "through".
-        $this->addDataObjectHasManyFields($dataObject);
-        // many_many relationships without a "through" object are not supported. Add warning for any relationships
-        // we find like that.
-        $this->addDataObjectManyManyFieldWarnings($dataObject);
+        if ($this->addRelations && !(!$this->addNestedRelations && $dataObject != $this->rootDataObject)) {
+            // Add direct relationships.
+            $this->addDataObjectHasOneFields($dataObject);
+            // Add belongs to relationships.
+            $this->addDataObjectBelongsToFields($dataObject);
+            // has_many fields will include any relationships that you're created using many_many "through".
+            $this->addDataObjectHasManyFields($dataObject);
+            // many_many relationships without a "through" object are not supported. Add warning for any relationships
+            // we find like that.
+            $this->addDataObjectManyManyFieldWarnings($dataObject);
+        }
 
         // If the DataObject has Fluent applied, then we also need to add Localised fields.
         if ($dataObject->hasExtension(FluentExtension::class)) {
@@ -714,5 +740,45 @@ class FixtureService
         }
 
         $this->warnings[] = $message;
+   }
+
+    /**
+     * @return bool
+     */
+    public function getAddRelations(): bool
+    {
+        return $this->addRelations;
+    }
+
+    /**
+     * Add relations on all DataObjects
+     *
+     * @param bool $addRelations
+     * @return $this
+     */
+    public function setAddRelations(bool $addRelations)
+    {
+        $this->addRelations = $addRelations;
+        return $this;
+    }
+
+    /**
+     * @return bool
+     */
+    public function getAddNestedRelations(): bool
+    {
+        return $this->addNestedRelations;
+    }
+
+    /**
+     * Add relations on DataObjects other than root
+     *
+     * @param bool $addNestedRelations
+     * @return $this
+     */
+    public function setAddNestedRelations(bool $addNestedRelations)
+    {
+        $this->addNestedRelations = $addNestedRelations;
+        return $this;
     }
 }
