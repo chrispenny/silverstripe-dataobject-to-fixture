@@ -256,6 +256,10 @@ class FixtureService
 
             $relatedObjectID = (int) $dataObject->{$relationFieldName};
 
+            // We cannot query a DataObject
+            if($relationClassName == DataObject::class) {
+                continue;
+            }
             $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
 
             // We expect the relationship to be a DataObject.
