@@ -68,7 +68,7 @@ $service->addDataObject($dataObject);
 
 // Check for warnings? This is somewhat important, because if you have looping relationships (which we have no way of
 // creating fixtures for at the moment) this is how you'll know about it.
-if (count($service->getWarnings() > 0) {
+if (count($service->getWarnings()) > 0) {
     Debug::dump($service->getWarnings());
 }
 
