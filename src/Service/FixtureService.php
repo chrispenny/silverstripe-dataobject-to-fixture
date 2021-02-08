@@ -340,7 +340,13 @@ class FixtureService
             // Use Schema to make sure that this relationship has a reverse has_one created. This will throw an
             // Exception if there isn't (SilverStripe always expects you to have it).
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
-
+            
+            // This class has requested that it not be included in relationship maps.
+            $exclude = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
+            if ($exclude) {
+                continue;
+            }
+            
             // If we have the correct relationship mapping (a "has_one" relationship on the object in the "has_many"),
             // then we can simply add each of these records and let the "has_one" be added by addRecordHasOneFields().
             foreach ($dataObject->relField($relationFieldName) as $relatedObject) {
