@@ -1,7 +1,7 @@
 # silverstripe-data-object-to-fixture
 
 Generate a YAML fixture from DataObjects
-
+- [Installation](#installation)
 - [Purpose (early stage)](#purpose-(early-stage))
 - [Purpose (future development)](#purpose-(future-development))
 - [Warnings](#warnings)
@@ -14,6 +14,12 @@ Generate a YAML fixture from DataObjects
 - [Fluent support](#fluent-support)
 - [Future features](#future-features)
 - [Things that this module does not currently do](#things-that-this-module-does-not-currently-do)
+
+## Installation
+
+```
+composer require chrispenny/silverstripe-data-object-to-fixture
+```
 
 ## Purpose (early stage)
 
