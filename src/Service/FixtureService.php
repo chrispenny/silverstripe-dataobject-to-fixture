@@ -14,6 +14,7 @@ use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
+use SilverStripe\ORM\RelationList;
 use Symfony\Component\Yaml\Yaml;
 use TractorCow\Fluent\Extension\FluentExtension;
 use TractorCow\Fluent\Model\Locale;
@@ -98,6 +99,11 @@ class FixtureService
         // Add the standard DB fields for this record
         $this->addDataObjectDBFields($dataObject);
 
+        // If the DataObject has Fluent applied, then we also need to add Localised fields.
+        if ($dataObject->hasExtension(FluentExtension::class)) {
+            $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
+        }
+
         if ($this->allowedDepth !== null && $currentDepth > $this->allowedDepth) {
             return $this;
         }
@@ -111,11 +117,6 @@ class FixtureService
         // many_many relationships without a "through" object are not supported. Add warning for any relationships
         // we find like that.
         $this->addDataObjectManyManyFieldWarnings($dataObject, $currentDepth);
-
-        // If the DataObject has Fluent applied, then we also need to add Localised fields.
-        if ($dataObject->hasExtension(FluentExtension::class)) {
-            $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
-        }
 
         return $this;
     }
@@ -491,6 +492,19 @@ class FixtureService
                                 $fieldValue = $localisedDataObject->relField($localisedField);
                             }
 
+                            // Check if this is a "regular" field value, if it is then add it and continue
+                            if (!$fieldValue instanceof DataObject && !$fieldValue instanceof RelationList) {
+                                $record->addFieldValue($localisedField, $fieldValue);
+
+                                continue;
+                            }
+
+                            // Remaining field values are going to be relational values, so we need to check whether or
+                            // not we're already at our max allowed depth before adding those relationships
+                            if ($this->allowedDepth !== null && $currentDepth > $this->allowedDepth) {
+                                continue;
+                            }
+
                             if ($fieldValue instanceof DataObject) {
                                 $relatedDataObjects[] = $fieldValue;
 
@@ -506,11 +520,9 @@ class FixtureService
                                 foreach ($fieldValue as $relatedDataObject) {
                                     $relatedDataObjects[] = $relatedDataObject;
                                 }
-
-                                continue;
                             }
 
-                            $record->addFieldValue($localisedField, $fieldValue);
+                            // No other field types are supported (EG: ManyManyList)
                         }
                     }
                 }
