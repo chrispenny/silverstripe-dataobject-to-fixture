@@ -44,7 +44,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         $id = $request->getVar('ID');
 
         if ($className && $id) {
-            $this->outputFixture($className, (int) $id);
+            $this->outputFixture($request, $className, (int) $id);
 
             return;
         }
@@ -151,11 +151,12 @@ class GenerateFixtureFromDataObject extends BuildTask
     }
 
     /**
+     * @param HTTPRequest $request
      * @param string $className
      * @param int $id
      * @throws Exception
      */
-    protected function outputFixture(string $className, int $id): void
+    protected function outputFixture(HTTPRequest $request, string $className, int $id): void
     {
         if (!$className) {
             echo '<p>No ClassName provided</p>';
@@ -169,6 +170,8 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
+        $maxDepth = (int) $request->getVar('maxDepth');
+
         /** @var DataObject $dataObject */
         $dataObject = $className::get()->byID($id);
 
@@ -178,9 +181,10 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
-        if (!$dataObject->exists()) {
+        // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
+        if (!$dataObject->isInDB()) {
             echo sprintf(
-                '<p>DataObject failed "exists()" requirement. ClassName: %s, ID: %s</p>',
+                '<p>DataObject failed "isInDB()" requirement. ClassName: %s, ID: %s</p>',
                 $className,
                 $id
             );
@@ -193,7 +197,22 @@ class GenerateFixtureFromDataObject extends BuildTask
             $className
         );
 
+        echo '<form action="" method="get">';
+        echo sprintf('<input type="hidden" name="ClassName" value="%s" />', $className);
+        echo sprintf('<input type="hidden" name="ID" value="%s" />', $id);
+        echo '<label>Max allowed depth (optional): ';
+        echo sprintf('<input name="maxDepth" type="text" value="%s" /><br />', $maxDepth ?: '');
+        echo 'This can be useful if you are hitting "Maximum function nesting level" errors<br />';
+        echo '</label>';
+        echo '<button type="submit">Submit</button>';
+        echo '</form>';
+
         $service = FixtureService::create();
+
+        if ($maxDepth) {
+            $service->setAllowedDepth($maxDepth);
+        }
+
         $service->addDataObject($dataObject);
 
         echo '<p>Warnings:</p>';

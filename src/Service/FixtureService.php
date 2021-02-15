@@ -10,7 +10,6 @@ use ChrisPenny\DataObjectToFixture\ORM\Record;
 use Exception;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
@@ -68,7 +67,8 @@ class FixtureService
      */
     public function addDataObject(DataObject $dataObject, int $currentDepth = 0): FixtureService
     {
-        if (!$dataObject->exists()) {
+        // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
+        if (!$dataObject->isInDB()) {
             throw new Exception('Your DataObject must be in the DB');
         }
 
@@ -104,7 +104,7 @@ class FixtureService
             $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
         }
 
-        if ($this->allowedDepth !== null && $currentDepth > $this->allowedDepth) {
+        if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
             return $this;
         }
 
@@ -183,7 +183,19 @@ class FixtureService
         $toArrayGroups = [];
 
         foreach ($this->fixtureManifest->getGroupsPrioritised() as $group) {
-            $toArrayGroups[$group->getClassName()] = $group->toArray();
+            $records = $group->toArray();
+
+            if (count($records) === 0) {
+                $this->addWarning(sprintf(
+                    'Fixture output: No records were found for Group/ClassName "%s". You might need to check that you'
+                        . ' do not have any relationships pointing to this Group/ClassName.',
+                    $group->getClassName(),
+                ));
+
+                continue;
+            }
+
+            $toArrayGroups[$group->getClassName()] = $records;
         }
 
         return $toArrayGroups;
@@ -452,7 +464,8 @@ class FixtureService
                     $relatedDataObjects,
                     $locale,
                     $className,
-                    $id
+                    $id,
+                    $currentDepth
                 ): void {
                     $state->setLocale($locale);
 
@@ -501,7 +514,7 @@ class FixtureService
 
                             // Remaining field values are going to be relational values, so we need to check whether or
                             // not we're already at our max allowed depth before adding those relationships
-                            if ($this->allowedDepth !== null && $currentDepth > $this->allowedDepth) {
+                            if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
                                 continue;
                             }
 
@@ -759,18 +772,25 @@ class FixtureService
     /**
      * @return int
      */
-    public function getAllowedDepth(): int
+    public function getAllowedDepth(): ?int
     {
         return $this->allowedDepth;
     }
 
     /**
      * @param int $allowedDepth
-     * @return $this
+     * @return FixtureService
      */
-    public function setAllowedDepth(int $allowedDepth = null)
+    public function setAllowedDepth(int $allowedDepth = null): FixtureService
     {
+        if ($allowedDepth === 0) {
+            $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
+
+            $allowedDepth = 1;
+        }
+
         $this->allowedDepth = $allowedDepth;
+
         return $this;
     }
 }
