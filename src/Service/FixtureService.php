@@ -10,10 +10,10 @@ use ChrisPenny\DataObjectToFixture\ORM\Record;
 use Exception;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\Dev\Debug;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
+use SilverStripe\ORM\RelationList;
 use Symfony\Component\Yaml\Yaml;
 use TractorCow\Fluent\Extension\FluentExtension;
 use TractorCow\Fluent\Model\Locale;
@@ -48,6 +48,11 @@ class FixtureService
      */
     private $warnings = [];
 
+    /**
+     * @var int
+     */
+    private $allowedDepth = null;
+
     public function __construct()
     {
         $this->fixtureManifest = new FixtureManifest();
@@ -56,14 +61,18 @@ class FixtureService
 
     /**
      * @param DataObject $dataObject
+     * @param int $currentDepth (for internal use)
      * @return FixtureService
      * @throws Exception
      */
-    public function addDataObject(DataObject $dataObject): FixtureService
+    public function addDataObject(DataObject $dataObject, int $currentDepth = 0): FixtureService
     {
-        if (!$dataObject->exists()) {
+        // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
+        if (!$dataObject->isInDB()) {
             throw new Exception('Your DataObject must be in the DB');
         }
+
+        $currentDepth += 1;
 
         // Any time we add a new DataObject, we need to set validated back to false.
         $this->validated = false;
@@ -89,20 +98,25 @@ class FixtureService
         $this->relationshipManifest->addGroup($group);
         // Add the standard DB fields for this record
         $this->addDataObjectDBFields($dataObject);
-        // Add direct relationships.
-        $this->addDataObjectHasOneFields($dataObject);
-        // Add belongs to relationships.
-        $this->addDataObjectBelongsToFields($dataObject);
-        // has_many fields will include any relationships that you're created using many_many "through".
-        $this->addDataObjectHasManyFields($dataObject);
-        // many_many relationships without a "through" object are not supported. Add warning for any relationships
-        // we find like that.
-        $this->addDataObjectManyManyFieldWarnings($dataObject);
 
         // If the DataObject has Fluent applied, then we also need to add Localised fields.
         if ($dataObject->hasExtension(FluentExtension::class)) {
-            $this->addDataObjectLocalisedFields($dataObject);
+            $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
         }
+
+        if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
+            return $this;
+        }
+
+        // Add direct relationships.
+        $this->addDataObjectHasOneFields($dataObject, $currentDepth);
+        // Add belongs to relationships.
+        $this->addDataObjectBelongsToFields($dataObject, $currentDepth);
+        // has_many fields will include any relationships that you're created using many_many "through".
+        $this->addDataObjectHasManyFields($dataObject, $currentDepth);
+        // many_many relationships without a "through" object are not supported. Add warning for any relationships
+        // we find like that.
+        $this->addDataObjectManyManyFieldWarnings($dataObject, $currentDepth);
 
         return $this;
     }
@@ -169,7 +183,19 @@ class FixtureService
         $toArrayGroups = [];
 
         foreach ($this->fixtureManifest->getGroupsPrioritised() as $group) {
-            $toArrayGroups[$group->getClassName()] = $group->toArray();
+            $records = $group->toArray();
+
+            if (count($records) === 0) {
+                $this->addWarning(sprintf(
+                    'Fixture output: No records were found for Group/ClassName "%s". You might need to check that you'
+                        . ' do not have any relationships pointing to this Group/ClassName.',
+                    $group->getClassName(),
+                ));
+
+                continue;
+            }
+
+            $toArrayGroups[$group->getClassName()] = $records;
         }
 
         return $toArrayGroups;
@@ -204,9 +230,10 @@ class FixtureService
 
     /**
      * @param DataObject $dataObject
+     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
-    protected function addDataObjectHasOneFields(DataObject $dataObject): void
+    protected function addDataObjectHasOneFields(DataObject $dataObject, int $currentDepth = 0): void
     {
         $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
 
@@ -257,7 +284,7 @@ class FixtureService
             $relatedObjectID = (int) $dataObject->{$relationFieldName};
 
             // We cannot query a DataObject
-            if($relationClassName == DataObject::class) {
+            if ($relationClassName == DataObject::class) {
                 continue;
             }
             $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
@@ -285,7 +312,7 @@ class FixtureService
             $record->addFieldValue($relationFieldName, $relationshipValue);
 
             // Add the related DataObject.
-            $this->addDataObject($relatedObject);
+            $this->addDataObject($relatedObject, $currentDepth);
 
             // Find the Group for the DataObject that we should have just added.
             $relatedGroup = $this->fixtureManifest->getGroupByClassName($relatedObject->ClassName);
@@ -301,9 +328,10 @@ class FixtureService
 
     /**
      * @param DataObject $dataObject
+     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
-    protected function addDataObjectBelongsToFields(DataObject $dataObject): void
+    protected function addDataObjectBelongsToFields(DataObject $dataObject, int $currentDepth = 0): void
     {
         // belongs_to fixture definitions don't appear to be support currently. This is how we can eventually solve
         // looping relationships though...
@@ -328,9 +356,10 @@ class FixtureService
 
     /**
      * @param DataObject $dataObject
+     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
-    protected function addDataObjectHasManyFields(DataObject $dataObject): void
+    protected function addDataObjectHasManyFields(DataObject $dataObject, int $currentDepth = 0): void
     {
         /** @var array $hasManyRelationships */
         $hasManyRelationships = $dataObject->config()->get('has_many');
@@ -344,26 +373,27 @@ class FixtureService
             // Use Schema to make sure that this relationship has a reverse has_one created. This will throw an
             // Exception if there isn't (SilverStripe always expects you to have it).
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
-            
+
             // This class has requested that it not be included in relationship maps.
             $exclude = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
             if ($exclude) {
                 continue;
             }
-            
+
             // If we have the correct relationship mapping (a "has_one" relationship on the object in the "has_many"),
             // then we can simply add each of these records and let the "has_one" be added by addRecordHasOneFields().
             foreach ($dataObject->relField($relationFieldName) as $relatedObject) {
                 // Add the related DataObject. Recursion starts.
-                $this->addDataObject($relatedObject);
+                $this->addDataObject($relatedObject, $currentDepth);
             }
         }
     }
 
     /**
      * @param DataObject $dataObject
+     * @param int $currentDepth (for internal use)
      */
-    protected function addDataObjectManyManyFieldWarnings(DataObject $dataObject): void
+    protected function addDataObjectManyManyFieldWarnings(DataObject $dataObject, int $currentDepth = 0): void
     {
         /** @var array $manyManyRelationships */
         $manyManyRelationships = $dataObject->config()->get('many_many');
@@ -392,7 +422,7 @@ class FixtureService
             // warning.
             $this->addWarning(sprintf(
                 'many_many relationships without a "through" are not supported. No yml generated for '
-                . 'relationship: %s::%s()',
+                    . 'relationship: %s::%s()',
                 $dataObject->ClassName,
                 $relationshipName
             ));
@@ -401,9 +431,10 @@ class FixtureService
 
     /**
      * @param DataObject|FluentExtension $dataObject
+     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
-    protected function addDataObjectLocalisedFields(DataObject $dataObject): void
+    protected function addDataObjectLocalisedFields(DataObject $dataObject, int $currentDepth = 0): void
     {
         $localeCodes = FluentHelper::getLocaleCodesByObjectInstance($dataObject);
         $localisedTables = $dataObject->getLocalisedTables();
@@ -428,12 +459,13 @@ class FixtureService
 
         foreach ($localeCodes as $locale) {
             FluentState::singleton()->withState(
-                function (FluentState $state) use(
+                function (FluentState $state) use (
                     $localisedTables,
                     $relatedDataObjects,
                     $locale,
                     $className,
-                    $id
+                    $id,
+                    $currentDepth
                 ): void {
                     $state->setLocale($locale);
 
@@ -463,7 +495,7 @@ class FixtureService
                         $record->addFieldValue('Locale', $locale);
 
                         foreach ($localisedFields as $localisedField) {
-                            $isIDField = (substr($localisedField, -2) === 'ID') ;
+                            $isIDField = (substr($localisedField, -2) === 'ID');
 
                             if ($isIDField) {
                                 $relationshipName = substr($localisedField, 0, -2);
@@ -471,6 +503,19 @@ class FixtureService
                                 $fieldValue = $localisedDataObject->relField($relationshipName);
                             } else {
                                 $fieldValue = $localisedDataObject->relField($localisedField);
+                            }
+
+                            // Check if this is a "regular" field value, if it is then add it and continue
+                            if (!$fieldValue instanceof DataObject && !$fieldValue instanceof RelationList) {
+                                $record->addFieldValue($localisedField, $fieldValue);
+
+                                continue;
+                            }
+
+                            // Remaining field values are going to be relational values, so we need to check whether or
+                            // not we're already at our max allowed depth before adding those relationships
+                            if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
+                                continue;
                             }
 
                             if ($fieldValue instanceof DataObject) {
@@ -488,11 +533,9 @@ class FixtureService
                                 foreach ($fieldValue as $relatedDataObject) {
                                     $relatedDataObjects[] = $relatedDataObject;
                                 }
-
-                                continue;
                             }
 
-                            $record->addFieldValue($localisedField, $fieldValue);
+                            // No other field types are supported (EG: ManyManyList)
                         }
                     }
                 }
@@ -500,7 +543,7 @@ class FixtureService
         }
 
         foreach ($relatedDataObjects as $relatedDataObject) {
-            $this->addDataObject($relatedDataObject);
+            $this->addDataObject($relatedDataObject, $currentDepth);
         }
     }
 
@@ -678,8 +721,8 @@ class FixtureService
 
                     $this->addWarning(sprintf(
                         'A relationships was removed between "%s" and "%s". This occurs if we have detected a loop'
-                        . '. Until belongs_to relationships are supported in fixtures, you might not be able to rely on'
-                        . ' fixtures generated to have the appropriate priority order',
+                            . '. Until belongs_to relationships are supported in fixtures, you might not be able to rely on'
+                            . ' fixtures generated to have the appropriate priority order',
                         $loopingRelationship,
                         $toClass
                     ));
@@ -724,5 +767,30 @@ class FixtureService
         }
 
         $this->warnings[] = $message;
+    }
+
+    /**
+     * @return int
+     */
+    public function getAllowedDepth(): ?int
+    {
+        return $this->allowedDepth;
+    }
+
+    /**
+     * @param int $allowedDepth
+     * @return FixtureService
+     */
+    public function setAllowedDepth(int $allowedDepth = null): FixtureService
+    {
+        if ($allowedDepth === 0) {
+            $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
+
+            $allowedDepth = 1;
+        }
+
+        $this->allowedDepth = $allowedDepth;
+
+        return $this;
     }
 }

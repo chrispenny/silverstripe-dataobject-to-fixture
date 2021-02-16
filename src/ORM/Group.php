@@ -106,6 +106,12 @@ class Group
         $records = [];
 
         foreach ($this->records as $record) {
+            $fields = $record->getFields();
+
+            if (count($fields) === 0) {
+                continue;
+            }
+
             $records[$record->getId()] = $record->getFields();
         }
 

@@ -12,3 +12,7 @@ SilverStripe\Security\MemberPassword:
 
 SilverStripe\Security\RememberLoginHash:
   exclude_from_fixture_relationships: 1
+
+Symbiote\QueuedJobs\Controllers\QueuedTaskRunner:
+  task_blacklist:
+    - ChrisPenny\DataObjectToFixture\Task\GenerateFixtureFromDataObject
