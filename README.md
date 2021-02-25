@@ -7,6 +7,8 @@ Generate a YAML fixture from DataObjects
 - [Warnings](#warnings)
 - [Dev task](#dev-task)
 - [General usage](#general-usage)
+- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
+- [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
 - [Common errors](#common-errors)
 - [Supported relationships](#supported-relationships)
@@ -86,6 +88,17 @@ $fixture = Director::baseFolder() . '/app/resources/fixture.yml';
 file_put_contents($fixture, $service->outputFixture());
 ```
 
+## Set a maximum depth to export
+
+If you are having issues with "nesting level of '256' reached", then one option is to set a maximum depth that the
+Service will attempt to export.
+
+```php
+// Instantiate the Service.
+$service = new FixtureService();
+$service->setAllowedDepth(2);
+```
+
 ## Excluding classes from export
 
 There might be some classes (like Members?) that you don't want to include in your fixture. The manifest will check
@@ -117,7 +130,45 @@ SilverStripe\Security\Member:
   exclude_from_fixture_relationships: 0
 ```
 
+## Excluding relationships from export
+
+Similar to excluding classes, there might be some specific relationships on specific classes that you want to exclude.
+Perhaps you have identified a looping relationship, and you would like to exclude one of them to make things
+predictable, or perhaps it's just a relationship you don't need in your fixtures.
+
+You can exclude specific relationships by adding `excluded_fixture_relationships` to the desired class.
+
+`excluded_fixture_relationships` accepts an array of **relationship names**.
+
+EG:
+```php
+class MyModel extends DataObject
+{
+    private static $has_one = [
+        'FeatureImage' => Image::class,
+    ];
+}
+```
+
+```yaml
+App\Models\MyModel:
+  excluded_fixture_relationships:
+    - FeatureImage
+```
+
 ## Common errors
+
+### Nesting level of '256' reached
+
+Above are three options that you can use to attempt to reduce this.
+
+- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
+- [Excluding relationships from export](#excluding-relationships-from-export)
+- [Excluding classes from export](#excluding-classes-from-export)
+
+I would recommend that you begin by exluding classes that you don't need for your export, then move to excluding
+specific relationships that might be causing deep levels of nested relationships, and finally, if those fail, you can
+set a max depth.
 
 ### DataObject::get() cannot query non-subclass DataObject directly
 

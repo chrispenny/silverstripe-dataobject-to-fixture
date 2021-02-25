@@ -175,6 +175,31 @@ class FixtureService
     }
 
     /**
+     * @return int
+     */
+    public function getAllowedDepth(): ?int
+    {
+        return $this->allowedDepth;
+    }
+
+    /**
+     * @param int $allowedDepth
+     * @return FixtureService
+     */
+    public function setAllowedDepth(int $allowedDepth = null): FixtureService
+    {
+        if ($allowedDepth === 0) {
+            $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
+
+            $allowedDepth = 1;
+        }
+
+        $this->allowedDepth = $allowedDepth;
+
+        return $this;
+    }
+
+    /**
      * @return array
      */
     protected function toArray(): array
@@ -271,9 +296,18 @@ class FixtureService
             }
 
             // This class has requested that it not be included in relationship maps.
-            $exclude = Config::inst()->get($relationFieldName, 'exclude_from_fixture_relationships');
+            $excludeClass = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
 
-            if ($exclude) {
+            if ($excludeClass) {
+                continue;
+            }
+
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $fieldName
+            );
+
+            if ($excludeRelationship) {
                 continue;
             }
 
@@ -385,9 +419,18 @@ class FixtureService
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
 
             // This class has requested that it not be included in relationship maps.
-            $exclude = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
+            $excludeClass = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
 
-            if ($exclude) {
+            if ($excludeClass) {
+                continue;
+            }
+
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $relationFieldName
+            );
+
+            if ($excludeRelationship) {
                 continue;
             }
 
@@ -662,9 +705,10 @@ class FixtureService
                     $this->relationshipManifest->removeRelationship($toClass, $loopingRelationship);
 
                     $this->addWarning(sprintf(
-                        'A relationships was removed between "%s" and "%s". This occurs if we have detected a loop'
-                            . '. Until belongs_to relationships are supported in fixtures, you might not be able to rely on'
-                            . ' fixtures generated to have the appropriate priority order',
+                        'A relationships was removed between "%s" and "%s". This occurs if we have detected a'
+                            . ' loop . Until belongs_to relationships are supported in fixtures, you might not be able'
+                            . ' to rely on fixtures generated to have the appropriate priority order. You might want to'
+                            . ' consider adding one of these relationships to `excluded_fixture_relationships`.',
                         $loopingRelationship,
                         $toClass
                     ));
@@ -709,31 +753,6 @@ class FixtureService
         }
 
         $this->warnings[] = $message;
-    }
-
-    /**
-     * @return int
-     */
-    public function getAllowedDepth(): ?int
-    {
-        return $this->allowedDepth;
-    }
-
-    /**
-     * @param int $allowedDepth
-     * @return FixtureService
-     */
-    public function setAllowedDepth(int $allowedDepth = null): FixtureService
-    {
-        if ($allowedDepth === 0) {
-            $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
-
-            $allowedDepth = 1;
-        }
-
-        $this->allowedDepth = $allowedDepth;
-
-        return $this;
     }
 
 }
