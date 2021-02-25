@@ -419,9 +419,9 @@ class FixtureService
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
 
             // This class has requested that it not be included in relationship maps.
-            $exclude = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
+            $excludeClass = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
 
-            if ($exclude) {
+            if ($excludeClass) {
                 continue;
             }
 
