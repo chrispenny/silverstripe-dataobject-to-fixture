@@ -221,6 +221,7 @@ class FixtureService
         }
 
         $dbFields = $dataObject->config()->get('db');
+
         if (!is_array($dbFields)) {
             return;
         }
@@ -270,7 +271,7 @@ class FixtureService
             }
 
             // This class has requested that it not be included in relationship maps.
-            $exclude = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
+            $exclude = Config::inst()->get($relationFieldName, 'exclude_from_fixture_relationships');
 
             if ($exclude) {
                 continue;
@@ -292,6 +293,7 @@ class FixtureService
             if ($relationClassName == DataObject::class) {
                 continue;
             }
+
             $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
 
             // We expect the relationship to be a DataObject.
@@ -368,6 +370,7 @@ class FixtureService
     {
         /** @var array $hasManyRelationships */
         $hasManyRelationships = $dataObject->config()->get('has_many');
+
         if (!is_array($hasManyRelationships)) {
             return;
         }
@@ -375,12 +378,15 @@ class FixtureService
         $schema = $dataObject->getSchema();
 
         foreach ($hasManyRelationships as $relationFieldName => $relationClassName) {
+            // Relationships are sometimes defined as ClassName.FieldName. Drop the .FieldName
+            $cleanRelationshipClassName = strtok($relationClassName, '.');
             // Use Schema to make sure that this relationship has a reverse has_one created. This will throw an
             // Exception if there isn't (SilverStripe always expects you to have it).
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
 
             // This class has requested that it not be included in relationship maps.
-            $exclude = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
+            $exclude = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
+
             if ($exclude) {
                 continue;
             }
@@ -402,6 +408,7 @@ class FixtureService
     {
         /** @var array $manyManyRelationships */
         $manyManyRelationships = $dataObject->config()->get('many_many');
+
         if (!is_array($manyManyRelationships)) {
             return;
         }
@@ -418,10 +425,10 @@ class FixtureService
 
             // This many_many relationship is being excluded anyhow, so we're also all good here.
             $exclude = Config::inst()->get($relationshipValue, 'exclude_from_fixture_relationships');
+
             if ($exclude) {
                 continue;
             }
-
 
             // Ok, so, you're probably expecting the fixture to include this relationship... but it won't. Here's your
             // warning.
