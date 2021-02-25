@@ -2,15 +2,17 @@
 
 namespace ChrisPenny\DataObjectToFixture\Manifest;
 
+use ChrisPenny\DataObjectToFixture\Helper\KahnSorter;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
 use Exception;
 
 class RelationshipManifest
 {
+
     /**
      * @var array
      */
-    public $relationships = [];
+    private $relationships = [];
 
     /**
      * @return array
@@ -72,4 +74,12 @@ class RelationshipManifest
         // Remove it.
         unset($this->relationships[$toClass][$key]);
     }
+
+    public function getPrioritisedOrder(): array
+    {
+        $kahnSorter = new KahnSorter($this->getRelationships());
+
+        return $kahnSorter->sort();
+    }
+
 }

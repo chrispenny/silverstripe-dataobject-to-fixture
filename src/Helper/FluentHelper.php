@@ -11,13 +11,10 @@ use TractorCow\Fluent\Extension\FluentVersionedExtension;
 
 /**
  * This stuff needs to go back to the Fluent module. It's living here for now so that I can proceed.
- *
- * Class FluentHelper
- *
- * @package ChrisPenny\DataObjectToFixture\Helper
  */
 class FluentHelper
 {
+
     /**
      * Static internal cache data
      *
@@ -75,4 +72,5 @@ class FluentHelper
 
         return static::$cacheData[$cacheKey] = [];
     }
+
 }

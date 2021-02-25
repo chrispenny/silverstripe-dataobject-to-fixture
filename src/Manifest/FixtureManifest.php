@@ -6,13 +6,9 @@ use ChrisPenny\DataObjectToFixture\ORM\Group;
 use ChrisPenny\DataObjectToFixture\ORM\Record;
 use Exception;
 
-/**
- * Class Manifest
- *
- * @package App\Module
- */
 class FixtureManifest
 {
+
     /**
      * @var Group[]
      */
@@ -70,40 +66,4 @@ class FixtureManifest
         return $this->groups;
     }
 
-    /**
-     * @return Group[]
-     */
-    public function getGroupsPrioritised(): array
-    {
-        $groups = $this->groups;
-
-        // Sort 'em! Highest priority number comes first (rendered at the top of the fixture file).
-        uasort($groups, function (Group $a, Group $b) {
-            if ($a->getPriority() == $b->getPriority()) {
-                return 0;
-            }
-
-            return ($a->getPriority() > $b->getPriority()) ? -1 : 1;
-        });
-
-        return $groups;
-    }
-
-    /**
-     * @return int
-     */
-    public function findMaxPriority(): int
-    {
-        // 0 is the default priority. If we have no groups, then the highest priority is 0.
-        if (count($this->groups) === 0) {
-            return 0;
-        }
-
-        $groups = $this->getGroupsPrioritised();
-
-        /** @var Group $highestGroup */
-        $highestGroup = array_shift($groups);
-
-        return $highestGroup->getPriority();
-    }
 }

@@ -12,13 +12,11 @@ use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 
 /**
- * Class GenerateFixtureFromDataObject
- *
  * @codeCoverageIgnore
- * @package ChrisPenny\DataObjectToFixture\Task
  */
 class GenerateFixtureFromDataObject extends BuildTask
 {
+
     /**
      * {@inheritDoc}
      *
@@ -223,4 +221,5 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '<p>Fixture output:</p>';
         echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $service->outputFixture());
     }
+
 }
