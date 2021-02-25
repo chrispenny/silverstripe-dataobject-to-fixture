@@ -4,24 +4,15 @@ namespace ChrisPenny\DataObjectToFixture\ORM;
 
 use SilverStripe\Core\Injector\Injectable;
 
-/**
- * Class Group
- *
- * @package App\Module
- */
 class Group
 {
+
     use Injectable;
 
     /**
      * @var string
      */
     private $className;
-
-    /**
-     * @var int
-     */
-    private $priority = 0;
 
     /**
      * @var array|Record[]
@@ -42,31 +33,6 @@ class Group
     public function getClassName(): string
     {
         return $this->className;
-    }
-
-    /**
-     * @return int
-     */
-    public function getPriority(): int
-    {
-        return $this->priority;
-    }
-
-    public function resetPriority(): void
-    {
-        $this->priority = 0;
-    }
-
-    /**
-     * @param int $priority
-     */
-    public function updateToHighestPriority(int $priority): void
-    {
-        if ($priority <= $this->priority) {
-            return;
-        }
-
-        $this->priority = $priority;
     }
 
     /**
@@ -125,4 +91,5 @@ class Group
     {
         return count($this->records) === 0;
     }
+
 }

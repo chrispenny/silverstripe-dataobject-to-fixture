@@ -4,13 +4,9 @@ namespace ChrisPenny\DataObjectToFixture\ORM;
 
 use SilverStripe\Core\Injector\Injectable;
 
-/**
- * Class Record
- *
- * @package App\Module
- */
 class Record
 {
+
     use Injectable;
 
     /**
@@ -84,4 +80,5 @@ class Record
     {
         return count($this->fields) === 0;
     }
+
 }

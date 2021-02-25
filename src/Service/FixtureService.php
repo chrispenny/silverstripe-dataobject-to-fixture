@@ -3,10 +3,12 @@
 namespace ChrisPenny\DataObjectToFixture\Service;
 
 use ChrisPenny\DataObjectToFixture\Helper\FluentHelper;
+use ChrisPenny\DataObjectToFixture\Helper\KahnSorter;
 use ChrisPenny\DataObjectToFixture\Manifest\FixtureManifest;
 use ChrisPenny\DataObjectToFixture\Manifest\RelationshipManifest;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
 use ChrisPenny\DataObjectToFixture\ORM\Record;
+use DNADesign\Elemental\Models\ElementalArea;
 use Exception;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
@@ -21,6 +23,7 @@ use TractorCow\Fluent\State\FluentState;
 
 class FixtureService
 {
+
     use Injectable;
 
     /**
@@ -140,13 +143,11 @@ class FixtureService
 
         // Find/create a Group for Locale so that we can set it as our highest priority.
         $group = $this->findOrCreateGroupByClassName(Locale::class);
-        // Yes, it's possible that the Locale Group is already set as the highest priority, and that we're about to
-        // increase that by 1 when we don't need to, but, it really doens't matter.
-        $localePriority = $this->fixtureManifest->findMaxPriority() + 1;
-        $group->updateToHighestPriority($localePriority);
 
         // Only add the Locale Records if this Group was/is new.
         if ($group->isNew()) {
+            $this->relationshipManifest->addGroup($group);
+
             /** @var DataList|Locale[] $locales */
             $locales = Locale::get();
 
@@ -158,8 +159,6 @@ class FixtureService
 
         // Make sure our groups are organised in the best order that we can figure out.
         $this->validateRelationships();
-
-        $this->organiseFixtureManifest();
 
         return Yaml::dump($this->toArray(), 3);
     }
@@ -182,7 +181,13 @@ class FixtureService
     {
         $toArrayGroups = [];
 
-        foreach ($this->fixtureManifest->getGroupsPrioritised() as $group) {
+        foreach ($this->relationshipManifest->getPrioritisedOrder() as $className) {
+            $group = $this->fixtureManifest->getGroupByClassName($className);
+
+            if (!$group) {
+                continue;
+            }
+
             $records = $group->toArray();
 
             if (count($records) === 0) {
@@ -595,76 +600,6 @@ class FixtureService
         return $record;
     }
 
-    /**
-     * @throws Exception
-     */
-    protected function organiseFixtureManifest(): void
-    {
-        // We can skip this if no extra DataObjects were added since the last time.
-        if ($this->organised) {
-            return;
-        }
-
-        // Reset all of our Groups back to priority 0.
-        foreach ($this->fixtureManifest->getGroups() as $group) {
-            $group->resetPriority();
-        }
-
-        foreach ($this->relationshipManifest->getRelationships() as $fromClass => $toClasses) {
-            $this->updateGroupPriorities($fromClass, $toClasses);
-        }
-    }
-
-    /**
-     * @param string $fromClass
-     * @param array $toClasses
-     * @throws Exception
-     */
-    protected function updateGroupPriorities(string $fromClass, array $toClasses)
-    {
-        $fromGroup = $this->fixtureManifest->getGroupByClassName($fromClass);
-
-        if ($fromGroup === null) {
-            throw new Exception(sprintf('Unable to find Group "%s"', $fromClass));
-        }
-
-        // If a $fromClass has no relationships, then it can safely be chucked at the top of the priorities.
-        if (count($toClasses) === 0) {
-            $fromGroup->updateToHighestPriority(999);
-        }
-
-        $newPriority = $fromGroup->getPriority() + 1;
-        $relationships = $this->relationshipManifest->getRelationships();
-
-        foreach ($toClasses as $toClass) {
-            $toGroup = $this->fixtureManifest->getGroupByClassName($toClass);
-
-            if ($toGroup === null) {
-                throw new Exception(sprintf('Unable to find Group "%s"', $fromClass));
-            }
-
-            $toGroup->updateToHighestPriority($newPriority);
-
-            // This To Class does not have any additional relationships that we need to consider.
-            if (!array_key_exists($toClass, $relationships)) {
-                continue;
-            }
-
-            // Grab the To Classes for this child relationship.
-            $childToClass = $relationships[$toClass];
-
-            // Sanity check, but we should only have keys when there are relationships. In any case, if there are no
-            // relationships for this Class, then there is nothing for us to do here.
-            if (count($childToClass) === 0) {
-                continue;
-            }
-
-            // This needs to be recursive, rather than a stack (while loop). It's important that we traverse one entire
-            // tree before starting a new one.
-            $this->updateGroupPriorities($toClass, $childToClass);
-        }
-    }
-
     protected function validateRelationships(): void
     {
         // We can skip this if no extra DataObjects were added since the last time.
@@ -793,4 +728,5 @@ class FixtureService
 
         return $this;
     }
+
 }
