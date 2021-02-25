@@ -111,6 +111,7 @@ class KahnSorter
             if (is_array($currentNode['dependencies'])) {
                 foreach ($currentNode['dependencies'] as $dependency) {
                     $this->nodes[$dependency]['count'] -= 1;
+
                     if ($this->nodes[$dependency]['count'] === 0) {
                         $pending[] = $this->nodes[$dependency];
                     }
