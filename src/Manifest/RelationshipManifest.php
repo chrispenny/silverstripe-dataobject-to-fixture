@@ -5,6 +5,7 @@ namespace ChrisPenny\DataObjectToFixture\Manifest;
 use ChrisPenny\DataObjectToFixture\Helper\KahnSorter;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
 use Exception;
+use SilverStripe\Core\Config\Config;
 
 class RelationshipManifest
 {
@@ -13,6 +14,11 @@ class RelationshipManifest
      * @var array
      */
     private $relationships = [];
+
+    /**
+     * @var array
+     */
+    private $excludedRelationships = [];
 
     /**
      * @return array
@@ -27,11 +33,24 @@ class RelationshipManifest
      */
     public function addGroup(Group $group): void
     {
+        // If we've added this group to relationships already, then we have everything we need
         if (array_key_exists($group->getClassName(), $this->relationships)) {
             return;
         }
 
+        // Add this group as a new relationship
         $this->relationships[$group->getClassName()] = [];
+
+        // Check to see if this class has any relationships that it wants to exclude as we process it
+        $excludes = Config::inst()->get($group->getClassName(), 'excluded_fixture_relationships');
+
+        // No it doesn't, so we can just return here
+        if (!$excludes) {
+            return;
+        }
+
+        // Add the list of relationships to exclude from our fixtures
+        $this->excludedRelationships[$group->getClassName()] = $excludes;
     }
 
     /**
@@ -75,11 +94,38 @@ class RelationshipManifest
         unset($this->relationships[$toClass][$key]);
     }
 
+    /**
+     * @param string $className
+     * @param string $relationshipName
+     * @return bool
+     */
+    public function shouldExcludeRelationship(string $className, string $relationshipName): bool
+    {
+        if (!array_key_exists($className, $this->excludedRelationships)) {
+            return false;
+        }
+
+        $exclusions = $this->excludedRelationships[$className];
+
+        return in_array($relationshipName, $exclusions);
+    }
+
+    /**
+     * @return array
+     */
     public function getPrioritisedOrder(): array
     {
         $kahnSorter = new KahnSorter($this->getRelationships());
 
         return $kahnSorter->sort();
+    }
+
+    /**
+     * @return array
+     */
+    public function getExcludedRelationships(): array
+    {
+        return $this->excludedRelationships;
     }
 
 }
