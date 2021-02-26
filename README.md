@@ -10,7 +10,7 @@ Generate a YAML fixture from DataObjects
 - [Set a maximum depth to export](#set-a-maximum-depth-to-export)
 - [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
-- [Common errors](#common-errors)
+- [Common issues](#common-issues)
 - [Supported relationships](#supported-relationships)
 - [Unsupported relationships](#unsupported-relationships)
 - [Fluent support](#fluent-support)
@@ -156,7 +156,20 @@ App\Models\MyModel:
     - FeatureImage
 ```
 
-## Common errors
+## Common issues
+
+### Relationship to ElementalArea missing
+
+TL;DR: There is a looping relationship between `Page` and `ElementalArea` in later versions of Elemental. You can
+exclude the `has_one` on `ElementalArea` as follows.
+
+```
+DNADesign\Elemental\Models\ElementalArea:
+  excluded_fixture_relationships:
+    - TopPage
+```
+
+Extra info: [Issue](https://github.com/chrispenny/silverstripe-data-object-to-fixture/issues/13).
 
 ### Nesting level of '256' reached
 
