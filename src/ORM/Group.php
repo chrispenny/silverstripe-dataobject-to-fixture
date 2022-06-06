@@ -9,27 +9,18 @@ class Group
 
     use Injectable;
 
-    /**
-     * @var string
-     */
-    private $className;
+    private ?string $className;
 
     /**
      * @var array|Record[]
      */
-    private $records = [];
+    private array $records = [];
 
-    /**
-     * @param string $className
-     */
     public function __construct(string $className)
     {
         $this->className = $className;
     }
 
-    /**
-     * @return string
-     */
     public function getClassName(): string
     {
         return $this->className;
@@ -45,7 +36,6 @@ class Group
 
     /**
      * @param mixed $id
-     * @return Record|null
      */
     public function getRecordByID($id): ?Record
     {
@@ -56,9 +46,6 @@ class Group
         return $this->records[$id];
     }
 
-    /**
-     * @param Record $record
-     */
     public function addRecord(Record $record): void
     {
         $this->records[$record->getId()] = $record;
@@ -84,9 +71,6 @@ class Group
         return $records;
     }
 
-    /**
-     * @return bool
-     */
     public function isNew(): bool
     {
         return count($this->records) === 0;

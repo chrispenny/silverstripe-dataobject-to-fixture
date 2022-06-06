@@ -17,18 +17,11 @@ class FluentHelper
 
     /**
      * Static internal cache data
-     *
-     * @var array
      */
-    protected static $cacheData = [];
+    protected static array $cacheData = [];
 
     /**
-     * Get all locales that have instances for a specified DataObject
-     *
-     * @param DataObject $dataObject
-     * @param string $stage
-     * @param bool $clearCache
-     * @return array
+     * @param DataObject|FluentExtension $dataObject
      */
     public static function getLocaleCodesByObjectInstance(
         DataObject $dataObject,
@@ -40,6 +33,7 @@ class FluentHelper
         }
 
         $cacheKey = 'locales_by_object_' . $dataObject->ClassName . $dataObject->ID . $stage;
+
         if (isset(static::$cacheData[$cacheKey])) {
             if (!$clearCache) {
                 return static::$cacheData[$cacheKey];
@@ -49,7 +43,6 @@ class FluentHelper
         }
 
         // Get table
-        /** @var DataObject|FluentExtension $dataObject  */
         $baseTable = $dataObject->baseTable();
         $table = $dataObject->getLocalisedTable($baseTable);
 
@@ -66,6 +59,7 @@ class FluentHelper
             ]);
 
         $result = $query->execute();
+
         if ($query->execute()->value() !== null) {
             return static::$cacheData[$cacheKey] = $result->column('Locale');
         }
