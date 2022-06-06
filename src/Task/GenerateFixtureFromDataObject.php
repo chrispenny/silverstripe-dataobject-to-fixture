@@ -17,6 +17,8 @@ use SilverStripe\ORM\DataObject;
 class GenerateFixtureFromDataObject extends BuildTask
 {
 
+    protected $title = 'Generate Fixture From DataObject'; // phpcs:ignore
+
     private static $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
 
     protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
