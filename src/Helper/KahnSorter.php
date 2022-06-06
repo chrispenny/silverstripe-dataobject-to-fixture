@@ -8,15 +8,9 @@ namespace ChrisPenny\DataObjectToFixture\Helper;
 class KahnSorter
 {
 
-    /**
-     * @var array[]
-     */
-    private $nodes = [];
+    private array $nodes = [];
 
-    /**
-     * @var array
-     */
-    private $messages = [];
+    private array $messages = [];
 
     /**
      * Example input:
@@ -42,7 +36,6 @@ class KahnSorter
      *   'SilverStripe\Taxonomy\TaxonomyType' => [],
      *   'SilverStripe\Assets\Image' => [],
      * ]
-     * @param array[] $nodes
      */
     public function __construct(array $nodes)
     {
@@ -97,9 +90,11 @@ class KahnSorter
         }
 
         foreach ($this->nodes as $node) {
-            if ($node['count'] === 0) {
-                $pending[] = $node;
+            if ($node['count'] > 0) {
+                continue;
             }
+
+            $pending[] = $node;
         }
 
         $output = [];
@@ -108,25 +103,27 @@ class KahnSorter
             $currentNode = array_pop($pending);
             $output[] = $currentNode['name'];
 
-            if (is_array($currentNode['dependencies'])) {
-                foreach ($currentNode['dependencies'] as $dependency) {
-                    $this->nodes[$dependency]['count'] -= 1;
+            if (!is_array($currentNode['dependencies'])) {
+                continue;
+            }
 
-                    if ($this->nodes[$dependency]['count'] === 0) {
-                        $pending[] = $this->nodes[$dependency];
-                    }
+            foreach ($currentNode['dependencies'] as $dependency) {
+                $this->nodes[$dependency]['count'] -= 1;
+
+                if ($this->nodes[$dependency]['count'] > 0) {
+                    continue;
                 }
+
+                $pending[] = $this->nodes[$dependency];
             }
         }
 
         foreach ($this->nodes as $node) {
-            if ($node['count'] !== 0) {
-                $this->messages[] = sprintf(
-                    'Node `%s` has `%s` left over dependencies',
-                    $node['name'],
-                    $node['count']
-                );
+            if ($node['count'] === 0) {
+                continue;
             }
+
+            $this->messages[] = sprintf('Node `%s` has `%s` left over dependencies', $node['name'], $node['count']);
         }
 
         return array_reverse($output);

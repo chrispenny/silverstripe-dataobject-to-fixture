@@ -10,27 +10,15 @@ use SilverStripe\Core\Config\Config;
 class RelationshipManifest
 {
 
-    /**
-     * @var array
-     */
-    private $relationships = [];
+    private array $relationships = [];
 
-    /**
-     * @var array
-     */
-    private $excludedRelationships = [];
+    private array $excludedRelationships = [];
 
-    /**
-     * @return array
-     */
     public function getRelationships(): array
     {
         return $this->relationships;
     }
 
-    /**
-     * @param Group $group
-     */
     public function addGroup(Group $group): void
     {
         // If we've added this group to relationships already, then we have everything we need
@@ -54,8 +42,6 @@ class RelationshipManifest
     }
 
     /**
-     * @param Group $from
-     * @param Group $to
      * @throws Exception
      */
     public function addRelationshipFromTo(Group $from, Group $to): void
@@ -64,7 +50,7 @@ class RelationshipManifest
             $this->relationships[$from->getClassName()] = [];
         }
 
-        if (in_array($to->getClassName(), $this->relationships[$from->getClassName()])) {
+        if (in_array($to->getClassName(), $this->relationships[$from->getClassName()], true)) {
             return;
         }
 
@@ -76,14 +62,10 @@ class RelationshipManifest
         $this->relationships = [];
     }
 
-    /**
-     * @param string $fromClass
-     * @param string $toClass
-     */
     public function removeRelationship(string $fromClass, string $toClass): void
     {
         // Find the key for this relationship.
-        $key = array_search($fromClass, $this->relationships[$toClass]);
+        $key = array_search($fromClass, $this->relationships[$toClass], true);
 
         // It doesn't exit, so just return.
         if ($key === false) {
@@ -94,11 +76,6 @@ class RelationshipManifest
         unset($this->relationships[$toClass][$key]);
     }
 
-    /**
-     * @param string $className
-     * @param string $relationshipName
-     * @return bool
-     */
     public function shouldExcludeRelationship(string $className, string $relationshipName): bool
     {
         if (!array_key_exists($className, $this->excludedRelationships)) {
@@ -107,12 +84,9 @@ class RelationshipManifest
 
         $exclusions = $this->excludedRelationships[$className];
 
-        return in_array($relationshipName, $exclusions);
+        return in_array($relationshipName, $exclusions, true);
     }
 
-    /**
-     * @return array
-     */
     public function getPrioritisedOrder(): array
     {
         $kahnSorter = new KahnSorter($this->getRelationships());
@@ -120,9 +94,6 @@ class RelationshipManifest
         return $kahnSorter->sort();
     }
 
-    /**
-     * @return array
-     */
     public function getExcludedRelationships(): array
     {
         return $this->excludedRelationships;

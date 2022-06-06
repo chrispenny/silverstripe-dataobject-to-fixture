@@ -14,10 +14,7 @@ class Record
      */
     private $id;
 
-    /**
-     * @var array
-     */
-    private $fields = [];
+    private array $fields = [];
 
     /**
      * @param mixed $id
@@ -35,29 +32,21 @@ class Record
         return $this->id;
     }
 
-    /**
-     * @return array
-     */
     public function getFields(): array
     {
         return $this->fields;
     }
 
     /**
-     * @param string $fieldName
      * @param mixed $value
-     * @return Record
      */
     public function addFieldValue(string $fieldName, $value): Record
     {
         $this->fields[$fieldName] = $value;
+
         return $this;
     }
 
-    /**
-     * @param string $forClass
-     * @return Record
-     */
     public function removeRelationshipValueForClass(string $forClass): Record
     {
         foreach ($this->fields as $fieldName => $fieldValue) {
@@ -73,9 +62,6 @@ class Record
         return $this;
     }
 
-    /**
-     * @return bool
-     */
     public function isNew(): bool
     {
         return count($this->fields) === 0;

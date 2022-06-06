@@ -3,12 +3,10 @@
 namespace ChrisPenny\DataObjectToFixture\Service;
 
 use ChrisPenny\DataObjectToFixture\Helper\FluentHelper;
-use ChrisPenny\DataObjectToFixture\Helper\KahnSorter;
 use ChrisPenny\DataObjectToFixture\Manifest\FixtureManifest;
 use ChrisPenny\DataObjectToFixture\Manifest\RelationshipManifest;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
 use ChrisPenny\DataObjectToFixture\ORM\Record;
-use DNADesign\Elemental\Models\ElementalArea;
 use Exception;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
@@ -26,35 +24,15 @@ class FixtureService
 
     use Injectable;
 
-    /**
-     * @var FixtureManifest
-     */
-    private $fixtureManifest;
+    private ?FixtureManifest $fixtureManifest;
 
-    /**
-     * @var RelationshipManifest
-     */
-    private $relationshipManifest;
+    private ?RelationshipManifest $relationshipManifest;
 
-    /**
-     * @var bool
-     */
-    private $validated = false;
+    private bool $validated = false;
 
-    /**
-     * @var bool
-     */
-    private $organised = false;
+    private array $warnings = [];
 
-    /**
-     * @var string[]
-     */
-    private $warnings = [];
-
-    /**
-     * @var int
-     */
-    private $allowedDepth = null;
+    private ?int $allowedDepth = null; // phpcs:ignore
 
     public function __construct()
     {
@@ -63,9 +41,6 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
-     * @param int $currentDepth (for internal use)
-     * @return FixtureService
      * @throws Exception
      */
     public function addDataObject(DataObject $dataObject, int $currentDepth = 0): FixtureService
@@ -79,7 +54,6 @@ class FixtureService
 
         // Any time we add a new DataObject, we need to set validated back to false.
         $this->validated = false;
-        $this->organised = false;
 
         // Find or create a record based on the DataObject you want to add.
         $record = $this->findOrCreateRecordByClassNameID($dataObject->ClassName, $dataObject->ID);
@@ -119,13 +93,12 @@ class FixtureService
         $this->addDataObjectHasManyFields($dataObject, $currentDepth);
         // many_many relationships without a "through" object are not supported. Add warning for any relationships
         // we find like that.
-        $this->addDataObjectManyManyFieldWarnings($dataObject, $currentDepth);
+        $this->addDataObjectManyManyFieldWarnings($dataObject);
 
         return $this;
     }
 
     /**
-     * @return string
      * @throws Exception
      */
     public function outputFixture(): string
@@ -163,9 +136,6 @@ class FixtureService
         return Yaml::dump($this->toArray(), 3);
     }
 
-    /**
-     * @return string[]
-     */
     public function getWarnings(): array
     {
         // Make sure this is done before returning our warnings.
@@ -174,19 +144,12 @@ class FixtureService
         return $this->warnings;
     }
 
-    /**
-     * @return int
-     */
     public function getAllowedDepth(): ?int
     {
         return $this->allowedDepth;
     }
 
-    /**
-     * @param int $allowedDepth
-     * @return FixtureService
-     */
-    public function setAllowedDepth(int $allowedDepth = null): FixtureService
+    public function setAllowedDepth(?int $allowedDepth = null): FixtureService
     {
         if ($allowedDepth === 0) {
             $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
@@ -199,9 +162,6 @@ class FixtureService
         return $this;
     }
 
-    /**
-     * @return array
-     */
     protected function toArray(): array
     {
         $toArrayGroups = [];
@@ -232,7 +192,6 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
      * @throws Exception
      */
     protected function addDataObjectDBFields(DataObject $dataObject): void
@@ -251,7 +210,7 @@ class FixtureService
             return;
         }
 
-        foreach ($dbFields as $fieldName => $fieldType) {
+        foreach (array_keys($dbFields) as $fieldName) {
             // DB fields are pretty simple key => value.
             $value = $dataObject->relField($fieldName);
 
@@ -260,8 +219,6 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
-     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
     protected function addDataObjectHasOneFields(DataObject $dataObject, int $currentDepth = 0): void
@@ -274,7 +231,7 @@ class FixtureService
 
         $record = $group->getRecordByID($dataObject->ID);
 
-        if ($group === null) {
+        if ($record === null) {
             throw new Exception(
                 sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
             );
@@ -324,7 +281,7 @@ class FixtureService
             $relatedObjectID = (int) $dataObject->{$relationFieldName};
 
             // We cannot query a DataObject
-            if ($relationClassName == DataObject::class) {
+            if ($relationClassName === DataObject::class) {
                 continue;
             }
 
@@ -368,9 +325,7 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
-     * @param int $currentDepth (for internal use)
-     * @throws Exception
+     * @phpcs:disable
      */
     protected function addDataObjectBelongsToFields(DataObject $dataObject, int $currentDepth = 0): void
     {
@@ -380,10 +335,7 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
-     * @param string $fromObjectClassName
-     * @param string $fromRelationship
-     * @return bool
+     * @phpcs:disable
      */
     protected function hasBelongsToRelationship(
         DataObject $dataObject,
@@ -396,8 +348,6 @@ class FixtureService
     }
 
     /**
-     * @param DataObject $dataObject
-     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
     protected function addDataObjectHasManyFields(DataObject $dataObject, int $currentDepth = 0): void
@@ -443,11 +393,7 @@ class FixtureService
         }
     }
 
-    /**
-     * @param DataObject $dataObject
-     * @param int $currentDepth (for internal use)
-     */
-    protected function addDataObjectManyManyFieldWarnings(DataObject $dataObject, int $currentDepth = 0): void
+    protected function addDataObjectManyManyFieldWarnings(DataObject $dataObject): void
     {
         /** @var array $manyManyRelationships */
         $manyManyRelationships = $dataObject->config()->get('many_many');
@@ -486,7 +432,6 @@ class FixtureService
 
     /**
      * @param DataObject|FluentExtension $dataObject
-     * @param int $currentDepth (for internal use)
      * @throws Exception
      */
     protected function addDataObjectLocalisedFields(DataObject $dataObject, int $currentDepth = 0): void
@@ -524,8 +469,8 @@ class FixtureService
                 ): void {
                     $state->setLocale($locale);
 
-                    // Re-fetch our DataObject. This time it should be Localised with all of the specific content that we
-                    // need to export for this Locale.
+                    // Re-fetch our DataObject. This time it should be Localised with all of the specific content that
+                    // we need to export for this Locale.
                     $localisedDataObject = DataObject::get($className)->byID($id);
 
                     if ($localisedDataObject === null) {
@@ -603,8 +548,6 @@ class FixtureService
     }
 
     /**
-     * @param string $className
-     * @return Group
      * @throws Exception
      */
     protected function findOrCreateGroupByClassName(string $className): Group
@@ -622,9 +565,7 @@ class FixtureService
     }
 
     /**
-     * @param string $className
      * @param string|int $id
-     * @return Record
      * @throws Exception
      */
     protected function findOrCreateRecordByClassNameID(string $className, $id): Record
@@ -670,11 +611,7 @@ class FixtureService
         $this->validated = true;
     }
 
-    /**
-     * @param array $parentage
-     * @param array $toClasses
-     */
-    protected function removeLoopingRelationships(array $parentage, array $toClasses)
+    protected function removeLoopingRelationships(array $parentage, array $toClasses): void
     {
         $relationships = $this->relationshipManifest->getRelationships();
 
@@ -743,12 +680,9 @@ class FixtureService
         }
     }
 
-    /**
-     * @param string $message
-     */
     protected function addWarning(string $message): void
     {
-        if (in_array($message, $this->warnings)) {
+        if (in_array($message, $this->warnings, true)) {
             return;
         }
 

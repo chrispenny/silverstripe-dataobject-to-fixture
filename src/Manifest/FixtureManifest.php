@@ -12,10 +12,9 @@ class FixtureManifest
     /**
      * @var Group[]
      */
-    private $groups = [];
+    private array $groups = [];
 
     /**
-     * @param Group $group
      * @throws Exception
      */
     public function addGroup(Group $group): void
@@ -23,10 +22,6 @@ class FixtureManifest
         $this->groups[$group->getClassName()] = $group;
     }
 
-    /**
-     * @param string $className
-     * @return Group|null
-     */
     public function getGroupByClassName(string $className): ?Group
     {
         if (!array_key_exists($className, $this->groups)) {
@@ -37,9 +32,7 @@ class FixtureManifest
     }
 
     /**
-     * @param string $className
      * @param string|int $id
-     * @return Record|null
      */
     public function getRecordByClassNameID(string $className, $id): ?Record
     {
@@ -49,13 +42,7 @@ class FixtureManifest
             return null;
         }
 
-        $record = $group->getRecordByID($id);
-
-        if ($group === null) {
-            return null;
-        }
-
-        return $record;
+        return $group->getRecordByID($id);
     }
 
     /**

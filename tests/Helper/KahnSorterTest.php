@@ -7,6 +7,8 @@ use SilverStripe\Dev\SapphireTest;
 
 /**
  * Shout out to Adrian Humphreys (@adrhumphreys) for providing this one.
+ *
+ * @phpcs:disable
  */
 class KhanSorterTest extends SapphireTest
 {

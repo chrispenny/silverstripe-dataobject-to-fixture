@@ -17,20 +17,9 @@ use SilverStripe\ORM\DataObject;
 class GenerateFixtureFromDataObject extends BuildTask
 {
 
-    /**
-     * {@inheritDoc}
-     *
-     * @var string
-     */
-    private static $segment = 'generate-fixture-from-dataobject';
+    private static $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
 
-    /**
-     * @return string
-     */
-    public function getDescription(): string
-    {
-        return 'Generate a text fixture from a DataObject in your Database';
-    }
+    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
 
     /**
      * @param HTTPRequest|mixed $request
@@ -123,7 +112,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '<th>Generate</th>';
         echo '<th>ID</th>';
 
-        foreach ($dbFields as $fieldName => $fieldType) {
+        foreach (array_keys($dbFields) as $fieldName) {
             echo sprintf('<th>%s</th>', $fieldName);
         }
 
@@ -137,9 +126,10 @@ class GenerateFixtureFromDataObject extends BuildTask
             echo sprintf($linkTemplate, $className, $dataObject->ID);
             echo sprintf('<td>%s</td>', $dataObject->ID);
 
-            foreach ($dbFields as $fieldName => $fieldType) {
+            foreach (array_keys($dbFields) as $fieldName) {
                 echo sprintf('<td>%s</td>', $dataObject->relField($fieldName));
             }
+
             echo '</tr>';
         }
 
@@ -181,11 +171,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
         if (!$dataObject->isInDB()) {
-            echo sprintf(
-                '<p>DataObject failed "isInDB()" requirement. ClassName: %s, ID: %s</p>',
-                $className,
-                $id
-            );
+            echo sprintf('<p>DataObject failed "isInDB()" requirement. ClassName: %s, ID: %s</p>', $className, $id);
 
             return;
         }
