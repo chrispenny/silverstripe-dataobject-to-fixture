@@ -8,7 +8,6 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\BuildTask;
-use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\PaginatedList;
 
@@ -259,7 +258,7 @@ class GenerateFixtureFromDataObject extends BuildTask
     {
         echo '<style>';
 
-        echo <<<CSS
+        echo <<<'CSS'
 body {
     background: #f7f7f7;
     font-family: Arial, sans-serif;
