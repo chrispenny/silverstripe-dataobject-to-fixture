@@ -42,7 +42,6 @@ recreated via Populate (without a dev needing to create the fixture themselves).
 
 This is in very, very early development stages. Please be aware that:
 
-- Namespaces might change
 - Classes might change
 - Entire paradigms on how I generate the fixtures might change
 
@@ -51,12 +50,12 @@ What won't change:
 - The public API will not change. There will still be a service with those 3 main methods.
 
 I would not recommend that you use this module (at this stage) for any application critical features, but I **would**
-recommend that you use it as a developer tool (to help you write your own fixtures, either for tests, or to be used
+recommend that you use it as a developer tool (EG: to help you write your own fixtures, either for tests, or to be used
 with Populate).
 
 ## Dev task
 
-A dev task can be found at `/chrispenny/silverstripe-data-object-to-fixture`.
+A dev task can be found at `/dev/tasks/generate-fixture-from-dataobject`.
 
 This task will allow you to generate a fixture (output on the screen for you to copy/paste) for any DataObject that
 you have defined in your project.

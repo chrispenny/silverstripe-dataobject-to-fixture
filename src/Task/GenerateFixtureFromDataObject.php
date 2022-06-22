@@ -8,8 +8,8 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\BuildTask;
-use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\PaginatedList;
 
 /**
  * @codeCoverageIgnore
@@ -29,21 +29,27 @@ class GenerateFixtureFromDataObject extends BuildTask
      */
     public function run($request): void
     {
+        $this->outputStyles();
+
         $className = $request->getVar('ClassName');
         $id = $request->getVar('ID');
 
+        // We have both a ClassName and ID, which means we can render out the fixture for a particular record
         if ($className && $id) {
             $this->outputFixture($request, $className, (int) $id);
 
             return;
         }
 
+        // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
+        // records for that particular class
         if ($className) {
-            $this->outputClassForm($className);
+            $this->outputClassForm($request, $className);
 
             return;
         }
 
+        // The initial form is a list of available classes
         $this->outputInitialForm();
     }
 
@@ -55,7 +61,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '<form action="" method="get">';
 
         echo '<p>';
-        echo '<label>ClassName (required): ';
+        echo '<label>ClassName (required):<br />';
         echo '<select name="ClassName" required>';
         echo '<option value="">-- Select --</option>';
 
@@ -68,12 +74,13 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '</p>';
 
         echo '<p>';
-        echo '<label>ID (optional): ';
-        echo '<input name="ID" type="text" value="" />';
+        echo '<label>ID (optional):<br />';
+        echo '<input name="ID" type="number" value="" />';
         echo '</label>';
         echo '<br>';
-        echo 'If you know the ID, then chuck it in here. If you don\'t know the ID, then submit the ClassName, and you';
-        echo ' will be provided with an interface to select the record you wish to generate a fixture for.';
+        echo '<span class="note">If you know the ID, then chuck it in here. If you don\'t know the ID, then submit the';
+        echo ' ClassName, and you will be provided with an interface to select the record you wish to generate a';
+        echo ' fixture for.</span>';
         echo '</p>';
 
         echo '<button type="submit">Submit</button>';
@@ -81,19 +88,18 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '</form>';
     }
 
-    protected function outputClassForm(string $className): void
+    protected function outputClassForm(HTTPRequest $request, string $className): void
     {
         $dbFields = Config::inst()->get($className, 'db');
-        /** @var DataList|DataObject[] $dataObjects */
-        $dataObjects = $className::get();
+        $start = $request->getVar('start') ?? 0;
 
-        if (!$dataObjects) {
-            echo sprintf('<p>Failed to retrieve DataObjects. ClassName: %s</p>', $className);
+        /** @var PaginatedList|DataObject[] $paginatedList */
+        $paginatedList = PaginatedList::create($className::get());
+        // We'll show a max of 20 records per page
+        $paginatedList->setPageLength(20);
+        $paginatedList->setPageStart($start);
 
-            return;
-        }
-
-        if ($dataObjects->count() === 0) {
+        if ($paginatedList->count() === 0) {
             echo sprintf('<p>No Database records found for ClassName: %s</p>', $className);
 
             return;
@@ -101,14 +107,39 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         echo '<p><a href="/dev/tasks/generate-fixture-from-dataobject">< Back to the beginning</a></p>';
 
-        echo '<p>Please select the record you wish to generate the fixture for below</p>';
+        echo '<div class="pagination">';
+        echo '<p><strong>Pagination:</strong></p>';
+        echo '<ul class="pagination-list">';
+
+        if ($paginatedList->PrevLink()) {
+            echo sprintf('<li><a href="%s">&leftarrow;</a></li>', $paginatedList->PrevLink());
+        } else {
+            echo '<li><span>&leftarrow;</span></li>';
+        }
+
+        foreach ($paginatedList->PaginationSummary() as $pageSummary) {
+            if ($pageSummary->CurrentBool) {
+                echo sprintf('<li><span>%s</span></li>', $pageSummary->PageNum);
+            } else {
+                echo sprintf('<li><a href="%s">%s</a></li>', $pageSummary->Link, $pageSummary->PageNum);
+            }
+        }
+
+        if ($paginatedList->NextLink()) {
+            echo sprintf('<li><a href="%s">&rightarrow;</a>', $paginatedList->NextLink());
+        } else {
+            echo '<li><span>&rightarrow;</span></li>';
+        }
+
+        echo '</ul>';
+        echo '</div>';
+        echo '<p>Please select the record you wish to generate the fixture for below:</p>';
 
         // Remove Datatime and Boolean fields, as they're (likely) not that useful for trying to find a specific record
         $dbFields = array_diff($dbFields, ['Datetime', 'Boolean']);
         $linkTemplate = '<td><a href="/dev/tasks/generate-fixture-from-dataobject?ClassName=%s&ID=%s">Link</a></td>';
 
-        echo '<table cellpadding="2px" style="display: block; width: 100%; overflow: scroll">';
-
+        echo '<table>';
         echo '<thead>';
         echo '<tr>';
         echo '<th>Generate</th>';
@@ -123,7 +154,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         echo '<tbody>';
 
-        foreach ($dataObjects as $dataObject) {
+        foreach ($paginatedList as $dataObject) {
             echo '<tr>';
             echo sprintf($linkTemplate, $className, $dataObject->ID);
             echo sprintf('<td>%s</td>', $dataObject->ID);
@@ -183,13 +214,18 @@ class GenerateFixtureFromDataObject extends BuildTask
             $className
         );
 
-        echo '<form action="" method="get">';
+        echo '<form class="depth-form" action="" method="get">';
         echo sprintf('<input type="hidden" name="ClassName" value="%s" />', $className);
         echo sprintf('<input type="hidden" name="ID" value="%s" />', $id);
-        echo '<label>Max allowed depth (optional): ';
+        echo '<label>Max allowed depth (optional):<br />';
         echo sprintf('<input name="maxDepth" type="text" value="%s" /><br />', $maxDepth ?: '');
-        echo 'This can be useful if you are hitting "Maximum function nesting level" errors<br />';
+        echo '<span class="note">';
+        echo 'This can be useful if you\'re hitting "Maximum function nesting level" errors. See the docs regarding';
+        echo ' "Excluding relationships from export" for more details on how you might avoid these errors';
+        echo '</span>';
         echo '</label>';
+        echo '<br />';
+        echo '<br />';
         echo '<button type="submit">Submit</button>';
         echo '</form>';
 
@@ -201,13 +237,114 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         $service->addDataObject($dataObject);
 
-        echo '<p>Warnings:</p>';
-        echo '<p>';
-        echo implode('<br>', $service->getWarnings());
-        echo '</p>';
+        echo '<div style="clear: both;"></div>';
 
-        echo '<p>Fixture output:</p>';
+        echo '<div class="warnings">';
+        echo '<p><strong>Warnings:</strong></p>';
+        echo '<ul>';
+
+        foreach ($service->getWarnings() as $warning) {
+            echo sprintf('<li>%s</li>', $warning);
+        }
+
+        echo '</ul>';
+        echo '</div>';
+
+        echo '<p><strong>Fixture output:</strong></p>';
         echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $service->outputFixture());
+    }
+
+    protected function outputStyles(): void
+    {
+        echo '<style>';
+
+        echo <<<'CSS'
+body {
+    background: #f7f7f7;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+}
+
+select,
+input {
+    padding: 4px;
+    margin: 4px 0;
+}
+
+.note {
+    color: #4d4d4d;
+    font-size: 14px;
+}
+
+table {
+    display: block;
+    width: 100%;
+    overflow: scroll;
+    border-collapse: collapse;
+}
+
+thead,
+tbody {
+    border-left: 1px solid #000;
+}
+
+tbody {
+    border-bottom: 1px solid #000;
+}
+
+th,
+td {
+    border-right: 1px solid #000;
+    border-top: 1px solid #000;
+    padding: 6px;
+}
+
+thead tr {
+    background: #f2f0f0;
+}
+
+tbody tr:nth-child(even) {
+    background: #e8e5e5;
+}
+
+.depth-form,
+.warnings,
+.pagination {
+    border: 1px solid #a9a9a9;
+    display: inline-block;
+    max-width: 900px;
+    padding: 12px;
+}
+
+.warnings li {
+    margin-bottom: 8px;
+    color: #580000;
+}
+
+.pagination-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pagination-list li {
+    display: inline-block;
+}
+
+.pagination-list li a,
+.pagination-list li span {
+    border: 1px solid #a9a9a9;
+    display: block;
+    margin: 0 4px;
+    padding: 6px 8px;
+}
+
+.pagination-list li span {
+    background: #e8e5e5;
+}
+CSS;
+
+        echo '</style>';
     }
 
 }
