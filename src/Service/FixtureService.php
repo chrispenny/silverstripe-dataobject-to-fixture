@@ -28,8 +28,6 @@ class FixtureService
 
     private ?RelationshipManifest $relationshipManifest;
 
-    private bool $validated = false;
-
     private array $warnings = [];
 
     private ?int $allowedDepth = null; // phpcs:ignore
@@ -74,9 +72,6 @@ class FixtureService
         if (!$dataObject->isInDB()) {
             throw new Exception('Your DataObject must be in the DB');
         }
-
-        // Any time we add a new DataObject, we need to set validated back to false
-        $this->validated = false;
 
         // Find or create a record based on the DataObject you want to add
         $record = $this->findOrCreateRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
@@ -427,16 +422,26 @@ class FixtureService
             // both directions, and they could choose to define it either with, or without dot notation in either
             // direction
 
+            $hasManyManyRelationship = $this->relationshipManifest->hasManyManyRelationship(
+                $dataObject->ClassName,
+                $relationFieldName,
+                $relationClassName
+            );
+
             // This many_many relationship has already been represented, so we don't want to add it again
             // Note: many_many relationship can be defined on one, or both sides of the relationship, but it can only
             // be represented once in our fixture
-            if ($this->relationshipManifest->hasManyManyRelationship($dataObject->ClassName, $relationFieldName, $relationClassName)) {
+            if ($hasManyManyRelationship) {
                 continue;
             }
 
             // Track that this many_many relationship has been represented already, so that when we addDataObject()
             // below we don't cause infinite recursion
-            $this->relationshipManifest->addManyManyRelationship($dataObject->ClassName, $relationFieldName, $relationClassName);
+            $this->relationshipManifest->addManyManyRelationship(
+                $dataObject->ClassName,
+                $relationFieldName,
+                $relationClassName
+            );
 
             // We're going to add these many_many relationships as an array
             $resolvedRelationships = [];
