@@ -203,8 +203,6 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
-        $maxDepth = (int) $request->getVar('maxDepth');
-
         /** @var DataObject $dataObject */
         $dataObject = $className::get()->byID($id);
 
@@ -229,12 +227,6 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '<form class="depth-form" action="" method="get">';
         echo sprintf('<input type="hidden" name="ClassName" value="%s" />', $className);
         echo sprintf('<input type="hidden" name="ID" value="%s" />', $id);
-        echo '<label>Max allowed depth (optional):<br />';
-        echo sprintf('<input name="maxDepth" type="text" value="%s" /><br />', $maxDepth ?: '');
-        echo '<span class="note">';
-        echo 'This can be useful if you\'re hitting "Maximum function nesting level" errors. See the docs regarding';
-        echo ' "Excluding relationships from export" for more details on how you might avoid these errors';
-        echo '</span>';
         echo '</label>';
         echo '<br />';
         echo '<br />';
@@ -243,11 +235,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         $service = FixtureService::create();
 
-        if ($maxDepth) {
-            $service->setAllowedDepth($maxDepth);
-        }
-
-        $service->processDataObject($dataObject);
+        $service->addDataObject($dataObject);
 
         echo '<div style="clear: both;"></div>';
 

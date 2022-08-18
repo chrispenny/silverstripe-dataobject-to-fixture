@@ -103,9 +103,9 @@ class FixtureService
         $this->addDataObjectDbFields($dataObject);
 
         // If the DataObject has Fluent applied, then we also need to add Localised fields
-//        if ($dataObject->hasExtension(FluentExtension::class)) {
-//            $this->addDataObjectLocalisedFields($dataObject);
-//        }
+        if ($dataObject->hasExtension(FluentExtension::class)) {
+            $this->addDataObjectLocalisedFields($dataObject);
+        }
 
         // Add direct has_one relationships
         $this->addDataObjectHasOneFields($dataObject);
