@@ -25,24 +25,33 @@ composer require chrispenny/silverstripe-data-object-to-fixture
 
 ## Purpose (early stage)
 
-The purpose of this module (at this early stage) is not to create perfect fixtures, but more to provide a solid
-guideline for what your fixture should look like.
+The purpose of this module (at this early stage) is not to guarantee perfect fixtures every time, but more to provide a
+solid guideline for what your fixture should look like.
 
 For example:
 Writing unit test fixtures can be difficult, especially when you're needing to visualise the structure and relationships
 of many different DataObjects (and then add an extra layer if you're using, say, Fluent).
 
+I would also like this module to work well with the
+[Populate](https://github.com/silverstripe/silverstripe-populate) module. Please note though that you'll need to be
+running version [2.1 or greater](https://github.com/silverstripe/silverstripe-populate/releases/tag/2.1.0), as versions
+before that did not support circular relationships.
+
 ## Purpose (future development)
 
-One goal for the future of this module is for it to work in tandem with the Populate module. I would like to get to a
-stage where content authors are able to (for example) "export pages" through the CMS, so that those pages can then be
-recreated via Populate (without a dev needing to create the fixture themselves).
+My dream for this module is that I would like to get to a stage where we can confidently say that generated fixtures
+will be perfect every time.
+
+From there, I could see this being used (as an example) for testers to be able to export pages through the CMS on their
+test environments, so that those pages can then be restored at any time via (maybe) Populate. How this would work
+exactly, and whether or not it would use Populate, is still to be determined.
 
 ## Warnings
 
-This is in very, very early development stages. Please be aware that:
+This is still in early development stages. Please be aware that:
 
 - Classes might change
+- Return types might change
 - Entire paradigms on how I generate the fixtures might change
 
 What won't change:
@@ -53,14 +62,16 @@ I would not recommend that you use this module (at this stage) for any applicati
 recommend that you use it as a developer tool (EG: to help you write your own fixtures, either for tests, or to be used
 with Populate).
 
-## Dev task
+## General usage
+
+### Dev task
 
 A dev task can be found at `/dev/tasks/generate-fixture-from-dataobject`.
 
 This task will allow you to generate a fixture (output on the screen for you to copy/paste) for any DataObject that
 you have defined in your project.
 
-## General usage
+### Code use
 
 ```php
 // Instantiate the Service.
@@ -157,19 +168,6 @@ App\Models\MyModel:
 
 ## Common issues
 
-### Relationship to ElementalArea missing
-
-TL;DR: There is a looping relationship between `Page` and `ElementalArea` in later versions of Elemental. You can
-exclude the `has_one` on `ElementalArea` as follows.
-
-```
-DNADesign\Elemental\Models\ElementalArea:
-  excluded_fixture_relationships:
-    - TopPage
-```
-
-Extra info: [Issue](https://github.com/chrispenny/silverstripe-data-object-to-fixture/issues/13).
-
 ### Nesting level of '256' reached
 
 Above are three options that you can use to attempt to reduce this.
@@ -184,7 +182,8 @@ set a max depth.
 
 ### DataObject::get() cannot query non-subclass DataObject directly
 
-You might see this error if you have a relationship being defined as simply `DataObject::class`, EG:
+You might see this error if you have polymorphic relationships (relationships being defined as simply
+`DataObject::class`), EG:
 
 ```php
 private static $has_one = [
