@@ -10,6 +10,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\PaginatedList;
+use Throwable;
 
 /**
  * @codeCoverageIgnore
@@ -19,9 +20,11 @@ class GenerateFixtureFromDataObject extends BuildTask
 
     protected $title = 'Generate Fixture From DataObject'; // phpcs:ignore
 
+    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
+
     private static $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
 
-    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
+    private ?int $previousExecution = null;
 
     /**
      * @param HTTPRequest|mixed $request
@@ -29,28 +32,37 @@ class GenerateFixtureFromDataObject extends BuildTask
      */
     public function run($request): void
     {
-        $this->outputStyles();
+        try {
+            $this->previousExecution = ini_get('max_execution_time');
+            ini_set('max_execution_time', 60);
 
-        $className = $request->getVar('ClassName');
-        $id = $request->getVar('ID');
+            $this->outputStyles();
 
-        // We have both a ClassName and ID, which means we can render out the fixture for a particular record
-        if ($className && $id) {
-            $this->outputFixture($request, $className, (int) $id);
+            $className = $request->getVar('ClassName');
+            $id = $request->getVar('ID');
 
-            return;
+            // We have both a ClassName and ID, which means we can render out the fixture for a particular record
+            if ($className && $id) {
+                $this->outputFixture($request, $className, (int)$id);
+
+                return;
+            }
+
+            // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
+            // records for that particular class
+            if ($className) {
+                $this->outputClassForm($request, $className);
+
+                return;
+            }
+
+            // The initial form is a list of available classes
+            $this->outputInitialForm();
+        } catch (Throwable $e) {
+            throw $e;
+        } finally {
+            ini_set('max_execution_time', $this->previousExecution);
         }
-
-        // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
-        // records for that particular class
-        if ($className) {
-            $this->outputClassForm($request, $className);
-
-            return;
-        }
-
-        // The initial form is a list of available classes
-        $this->outputInitialForm();
     }
 
     protected function outputInitialForm(): void
@@ -235,7 +247,7 @@ class GenerateFixtureFromDataObject extends BuildTask
             $service->setAllowedDepth($maxDepth);
         }
 
-        $service->addDataObject($dataObject);
+        $service->processDataObject($dataObject);
 
         echo '<div style="clear: both;"></div>';
 

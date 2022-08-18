@@ -34,6 +34,11 @@ class FixtureService
 
     private ?int $allowedDepth = null; // phpcs:ignore
 
+    /**
+     * @var DataObject[]
+     */
+    private array $dataObjectStack = [];
+
     public function __construct()
     {
         $this->fixtureManifest = new FixtureManifest();
@@ -45,19 +50,30 @@ class FixtureService
     /**
      * @throws Exception
      */
-    public function addDataObject(DataObject $dataObject, int $currentDepth = 0): ?Record
+    public function addDataObject(DataObject $dataObject): void
+    {
+        // Add this initial DataObject to the stack that we'll process
+        $this->dataObjectStack[] = $dataObject;
+
+        // Keep running until the stack is empty
+        while ($this->dataObjectStack) {
+            // Drop out the next item in the stack
+            $dataObject = array_shift($this->dataObjectStack);
+
+            // processDataObject() can itself add more DataObjects to the stack to be processed
+            $this->processDataObject($dataObject);
+        }
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function processDataObject(DataObject $dataObject): ?Record
     {
         // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
         if (!$dataObject->isInDB()) {
             throw new Exception('Your DataObject must be in the DB');
         }
-
-        // If you've requested that we only process to a certain depth, then we'll return early if we've hit that depth
-        if ($this->getAllowedDepth() !== null && $currentDepth >= $this->getAllowedDepth()) {
-            return null;
-        }
-
-        $currentDepth += 1;
 
         // Any time we add a new DataObject, we need to set validated back to false
         $this->validated = false;
@@ -87,19 +103,19 @@ class FixtureService
         $this->addDataObjectDbFields($dataObject);
 
         // If the DataObject has Fluent applied, then we also need to add Localised fields
-        if ($dataObject->hasExtension(FluentExtension::class)) {
-            $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
-        }
+//        if ($dataObject->hasExtension(FluentExtension::class)) {
+//            $this->addDataObjectLocalisedFields($dataObject);
+//        }
 
         // Add direct has_one relationships
-        $this->addDataObjectHasOneFields($dataObject, $currentDepth);
+        $this->addDataObjectHasOneFields($dataObject);
         // has_many fields may also include relationships that you've created using many_many "through" (so long as
         // you also defined the has_many)
-        $this->addDataObjectHasManyFields($dataObject, $currentDepth);
+        $this->addDataObjectHasManyFields($dataObject);
         // Add many_many fields that do not contain through relationships
-        $this->addDataObjectManyManyFields($dataObject, $currentDepth);
+        $this->addDataObjectManyManyFields($dataObject);
         // Add many_many fields that contain through relationships
-        $this->addDataObjectManyManyThroughFields($dataObject, $currentDepth);
+        $this->addDataObjectManyManyThroughFields($dataObject);
 
         return $record;
     }
@@ -221,7 +237,7 @@ class FixtureService
     /**
      * @throws Exception
      */
-    private function addDataObjectHasOneFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectHasOneFields(DataObject $dataObject): void
     {
         // The Group should already exist at this point
         $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
@@ -310,44 +326,22 @@ class FixtureService
             // Build out the value that we want to use in our Fixture. This should be a "relationship" value
             $relationshipValue = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 
-            // Add the related DataObject. Before we add the relationship, let's make sure that the Record was actually
-            // added
-            $relatedRecord = $this->addDataObject($relatedObject, $currentDepth);
-
-            // It wasn't (most likely because we've hit the "depth" limit), so we shouldn't add the relationship
-            if (!$relatedRecord) {
-                $this->addWarning(sprintf(
-                    'We were unable to add record %s.%s when processing the has_one relationships for %s.%s',
-                    $relatedObject->ClassName,
-                    $relatedObject->ID,
-                    $dataObject->ClassName,
-                    $dataObject->ID
-                ));
-
-                continue;
-            }
-
             // Add the relationship field to our current Record
             $record->addFieldValue($relationFieldName, $relationshipValue);
 
-            // Find the Group for the DataObject that we should have just added
-            $relatedGroup = $this->fixtureManifest->getGroupByClassName($relatedObject->ClassName);
-
-            // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
-            if ($relatedGroup === null) {
-                throw new Exception(sprintf('Unable to find Group "%s"', $relatedObject->ClassName));
-            }
-
             // Add a relationship map for these Groups. That being, our origin DataObject class relies on the related
             // DataObject class (EG: Page has ElementalArea)
-            $this->relationshipManifest->addRelationship($group, $relatedGroup);
+            $this->relationshipManifest->addRelationship($dataObject->ClassName, $relatedObject->ClassName);
+
+            // Add the related DataObject to the stack to be processed
+            $this->dataObjectStack[] = $relatedObject;
         }
     }
 
     /**
      * @throws Exception
      */
-    private function addDataObjectHasManyFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectHasManyFields(DataObject $dataObject): void
     {
         /** @var array $hasManyRelationships */
         $hasManyRelationships = $dataObject->config()->get('has_many');
@@ -387,8 +381,8 @@ class FixtureService
             // If we have the correct relationship mapping (a "has_one" relationship on the object in the "has_many"),
             // then we can simply add each of these records and let the "has_one" be added by addRecordHasOneFields()
             foreach ($dataObject->relField($relationFieldName) as $relatedObject) {
-                // Add the related DataObject. Recursion starts
-                $this->addDataObject($relatedObject, $currentDepth);
+                // Add the related DataObject to the stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
             }
         }
     }
@@ -396,7 +390,7 @@ class FixtureService
     /**
      * @throws Exception
      */
-    private function addDataObjectManyManyFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectManyManyFields(DataObject $dataObject): void
     {
         // The Group should already exist at this point
         $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
@@ -450,25 +444,11 @@ class FixtureService
             $relatedObjects = $dataObject->relField($relationFieldName);
 
             foreach ($relatedObjects as $relatedObject) {
-                // Add the related DataObject. Before we add the relationship, let's make sure that the Record was
-                // actually added
-                $relatedRecord = $this->addDataObject($relatedObject, $currentDepth);
-
-                // It wasn't (most likely because we've hit the "depth" limit), so we shouldn't add the relationship
-                if (!$relatedRecord) {
-                    $this->addWarning(sprintf(
-                        'We were unable to add record %s.%s when processing the many_many relationships for %s.%s',
-                        $relatedObject->ClassName,
-                        $relatedObject->ID,
-                        $dataObject->ClassName,
-                        $dataObject->ID
-                    ));
-
-                    continue;
-                }
-
                 // Add the related DataObject as one of our resolved relationships
                 $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
+
+                // Add the related DataObject to our stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
             }
 
             // There are no relationships for us to track
@@ -484,7 +464,7 @@ class FixtureService
     /**
      * @throws Exception
      */
-    private function addDataObjectManyManyThroughFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectManyManyThroughFields(DataObject $dataObject): void
     {
         // The Group should already exist at this point
         $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
@@ -559,25 +539,11 @@ class FixtureService
             $relatedObjects = $dataObject->relField($relationFieldName);
 
             foreach ($relatedObjects as $relatedObject) {
-                // Add the related DataObject. Before we add the relationship, let's make sure that the Record was
-                // actually added
-                $relatedRecord = $this->addDataObject($relatedObject, $currentDepth);
-
-                // It wasn't (most likely because we've hit the "depth" limit), so we shouldn't add the relationship
-                if (!$relatedRecord) {
-                    $this->addWarning(sprintf(
-                        'We were unable to add record %s.%s when processing the many_many relationships for %s.%s',
-                        $relatedObject->ClassName,
-                        $relatedObject->ID,
-                        $dataObject->ClassName,
-                        $dataObject->ID
-                    ));
-
-                    continue;
-                }
-
                 // Add the related DataObject as one of our resolved relationships
                 $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
+
+                // Add the related DataObject to the stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
             }
 
             // There are no relationships for us to track
@@ -703,7 +669,8 @@ class FixtureService
         }
 
         foreach ($relatedDataObjects as $relatedDataObject) {
-            $this->addDataObject($relatedDataObject, $currentDepth);
+            // Add the related DataObject to the stack to be processed
+            $this->dataObjectStack[] = $relatedDataObject;
         }
     }
 

@@ -46,17 +46,17 @@ class RelationshipManifest
     /**
      * @throws Exception
      */
-    public function addRelationship(Group $from, Group $to): void
+    public function addRelationship(string $from, string $to): void
     {
-        if (!array_key_exists($from->getClassName(), $this->relationships)) {
-            $this->relationships[$from->getClassName()] = [];
+        if (!array_key_exists($from, $this->relationships)) {
+            $this->relationships[$from] = [];
         }
 
-        if (in_array($to->getClassName(), $this->relationships[$from->getClassName()], true)) {
+        if (in_array($to, $this->relationships[$from], true)) {
             return;
         }
 
-        $this->relationships[$from->getClassName()][] = $to->getClassName();
+        $this->relationships[$from][] = $to;
     }
 
     public function hasManyManyThroughRelationship(string $throughClass): bool
