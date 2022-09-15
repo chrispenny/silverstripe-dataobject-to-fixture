@@ -101,7 +101,7 @@ class RelationshipManifest
         // Again though, remember that we don't know if the relationship was defined with dot notations by the dev
 
         // Let's search to see if we can find our $from (dot notation) as a value in the array
-        $relationshipFrom = array_search($from, $this->manyManyRelationships);
+        $relationshipFrom = array_search($from, $this->manyManyRelationships, true);
 
         // Again, remember that these relationships are unique and can't be polymorphic, so if we find this particular
         // dot notation as a value, then it means we have already tracked this relationship
@@ -125,7 +125,7 @@ class RelationshipManifest
         [$toClass] = explode('.', $to);
 
         // Let's search to see if we can find just the $fromClass (without dot notation)
-        $relationshipsFrom = array_keys($this->manyManyRelationships, $fromClass);
+        $relationshipsFrom = array_keys($this->manyManyRelationships, $fromClass, true);
 
         // Because we are searching for non-dot notation, it's possible that we have received multiple results for
         // classes that relate to our $fromClass

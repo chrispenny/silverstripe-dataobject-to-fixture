@@ -30,7 +30,7 @@ class GenerateFixtureFromDataObject extends BuildTask
      * @param HTTPRequest|mixed $request
      * @throws Exception
      */
-    public function run($request): void
+    public function run($request): void // phpcs:ignore
     {
         try {
             $this->previousExecution = ini_get('max_execution_time');
