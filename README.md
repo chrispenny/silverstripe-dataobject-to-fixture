@@ -98,17 +98,6 @@ $fixture = Director::baseFolder() . '/app/resources/fixture.yml';
 file_put_contents($fixture, $service->outputFixture());
 ```
 
-## Set a maximum depth to export
-
-If you are having issues with "nesting level of '256' reached", then one option is to set a maximum depth that the
-Service will attempt to export.
-
-```php
-// Instantiate the Service.
-$service = new FixtureService();
-$service->setAllowedDepth(2);
-```
-
 ## Excluding classes from export
 
 There might be some classes (like Members?) that you don't want to include in your fixture. The manifest will check

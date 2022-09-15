@@ -34,7 +34,7 @@ class FixtureManifest
     /**
      * @param string|int $id
      */
-    public function getRecordByClassNameID(string $className, $id): ?Record
+    public function getRecordByClassNameId(string $className, $id): ?Record
     {
         $group = $this->getGroupByClassName($className);
 
@@ -42,7 +42,7 @@ class FixtureManifest
             return null;
         }
 
-        return $group->getRecordByID($id);
+        return $group->getRecordById($id);
     }
 
     /**

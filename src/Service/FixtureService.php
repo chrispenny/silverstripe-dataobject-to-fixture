@@ -30,7 +30,9 @@ class FixtureService
 
     private array $warnings = [];
 
-    private ?int $allowedDepth = null; // phpcs:ignore
+    private ?int $allowedDepth = null;
+
+    private ?array $toArrayCached = null;
 
     /**
      * @var DataObject[]
@@ -39,10 +41,17 @@ class FixtureService
 
     public function __construct()
     {
+        // The Fixture manifest is a simple (ish) mapping of Groups (classes) and Records (DataObjects). For example,
+        // the Group under the key `Page` will contain any/all Page DataObjects that were added to the fixture
         $this->fixtureManifest = new FixtureManifest();
-        // The RelationshipManifest is a simple mapping of Class names and what other Classes that have relationships
-        // to. This will allow us to order (as best we can) our fixture output later on
+        // The RelationshipManifest is a simple mapping of Class names and what other Classes they have relationships
+        // to. This will allow us to order (as best we can) our FixtureManifest later on
         $this->relationshipManifest = new RelationshipManifest();
+    }
+
+    public function getWarnings(): array
+    {
+        return $this->warnings;
     }
 
     /**
@@ -50,6 +59,9 @@ class FixtureService
      */
     public function addDataObject(DataObject $dataObject): void
     {
+        // Remove our cached array fixture, as you've just added another DataObject
+        $this->toArrayCached = null;
+
         // Add this initial DataObject to the stack that we'll process
         $this->dataObjectStack[] = $dataObject;
 
@@ -66,7 +78,87 @@ class FixtureService
     /**
      * @throws Exception
      */
-    public function processDataObject(DataObject $dataObject): ?Record
+    public function outputFixture(): string
+    {
+        // One last thing we need to do before we output this, is make sure, if we're using Fluent, that we've added
+        // each of our Locales to the fixture with the highest priority possible
+
+        // This project isn't using Fluent/Locales, so we can return our yaml here
+        if (!class_exists(Locale::class)) {
+            return Yaml::dump($this->toArray(), 3);
+        }
+
+        // We are using Fluent, but we don't have any Locales created, so there is nothing for us to add here
+        if (Locale::get()->count() === 0) {
+            return Yaml::dump($this->toArray(), 3);
+        }
+
+        // Find/create a Group for Locale so that we can set it as our highest priority
+        $group = $this->findOrCreateGroupByClassName(Locale::class);
+
+        // Only add the Locale Records if this Group was/is new
+        if ($group->isNew()) {
+            $this->relationshipManifest->addGroup($group);
+
+            /** @var DataList|Locale[] $locales */
+            $locales = Locale::get();
+
+            // Add all Locale Records
+            foreach ($locales as $locale) {
+                $this->addDataObject($locale);
+            }
+        }
+
+        return Yaml::dump($this->toArray(), 3);
+    }
+
+    private function toArray(): array
+    {
+        // If we have a cache of this array already, then return it now
+        if ($this->toArrayCached !== null) {
+            return $this->toArrayCached;
+        }
+
+        $toArrayGroups = [];
+
+        // getPrioritisedOrder() uses our KahnSorter to arrange our fixture (as best we can) with dependencies at the
+        // top of the fixture
+        // Note: This isn't actually as important now that Populate supports "retries"
+        foreach ($this->relationshipManifest->getPrioritisedOrder() as $className) {
+            $group = $this->fixtureManifest->getGroupByClassName($className);
+
+            // Sanity check, but this should always be present if it was represented in our PrioritisedOrder
+            if (!$group) {
+                continue;
+            }
+
+            // Grab all the records for this Group
+            $records = $group->toArray();
+
+            // Rather than break here, we'll add a warning, as there really should have been records
+            if (count($records) === 0) {
+                $this->addWarning(sprintf(
+                    'Fixture output: No records were found for Group/ClassName "%s". You might need to check that you'
+                    . ' do not have any relationships pointing to this Group/ClassName.',
+                    $group->getClassName(),
+                ));
+
+                continue;
+            }
+
+            $toArrayGroups[$group->getClassName()] = $records;
+        }
+
+        // Update our cache
+        $this->toArrayCached = $toArrayGroups;
+
+        return $this->toArrayCached;
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function processDataObject(DataObject $dataObject): ?Record
     {
         // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
         if (!$dataObject->isInDB()) {
@@ -118,103 +210,19 @@ class FixtureService
     /**
      * @throws Exception
      */
-    public function outputFixture(): string
-    {
-        // One last thing we need to do before we output this, is make sure, if we're using Fluent, that we've added
-        // each of our Locales to the fixture with the highest priority possible.
-        if (!class_exists(Locale::class)) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // We don't have any Locales created, so there is nothing for us to add here.
-        if (Locale::get()->count() === 0) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // Find/create a Group for Locale so that we can set it as our highest priority.
-        $group = $this->findOrCreateGroupByClassName(Locale::class);
-
-        // Only add the Locale Records if this Group was/is new.
-        if ($group->isNew()) {
-            $this->relationshipManifest->addGroup($group);
-
-            /** @var DataList|Locale[] $locales */
-            $locales = Locale::get();
-
-            // Add all Locale Records.
-            foreach ($locales as $locale) {
-                $this->addDataObject($locale);
-            }
-        }
-
-        return Yaml::dump($this->toArray(), 3);
-    }
-
-    public function getWarnings(): array
-    {
-        return $this->warnings;
-    }
-
-    public function getAllowedDepth(): ?int
-    {
-        return $this->allowedDepth;
-    }
-
-    public function setAllowedDepth(?int $allowedDepth = null): FixtureService
-    {
-        if ($allowedDepth === 0) {
-            $this->addWarning('You set an allowed depth of 0. We have assumed that you mean "no limit".');
-
-            return $this;
-        }
-
-        $this->allowedDepth = $allowedDepth;
-
-        return $this;
-    }
-
-    private function toArray(): array
-    {
-        $toArrayGroups = [];
-
-        foreach ($this->relationshipManifest->getPrioritisedOrder() as $className) {
-            $group = $this->fixtureManifest->getGroupByClassName($className);
-
-            if (!$group) {
-                continue;
-            }
-
-            $records = $group->toArray();
-
-            if (count($records) === 0) {
-                $this->addWarning(sprintf(
-                    'Fixture output: No records were found for Group/ClassName "%s". You might need to check that you'
-                        . ' do not have any relationships pointing to this Group/ClassName.',
-                    $group->getClassName(),
-                ));
-
-                continue;
-            }
-
-            $toArrayGroups[$group->getClassName()] = $records;
-        }
-
-        return $toArrayGroups;
-    }
-
-    /**
-     * @throws Exception
-     */
     private function addDataObjectDbFields(DataObject $dataObject): void
     {
-        $record = $this->fixtureManifest->getRecordByClassNameID($dataObject->ClassName, $dataObject->ID);
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
+        // The Record should already exist at this point (as we only call this method processDataObject()
         if ($record === null) {
+            // We should just bail out
             throw new Exception(
                 sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
             );
         }
 
+        // Find all the DB fields that have been configured for this DataObject
         $dbFields = $dataObject->config()->get('db');
 
         if (!is_array($dbFields)) {
@@ -222,7 +230,8 @@ class FixtureService
         }
 
         foreach (array_keys($dbFields) as $fieldName) {
-            // DB fields are pretty simple key => value.
+            // DB fields are pretty simple key => value. Using relField means that we follow Silverstripe convention
+            // for if a developer has created any override methods/etc
             $value = $dataObject->relField($fieldName);
 
             $record->addFieldValue($fieldName, $value);
@@ -234,16 +243,8 @@ class FixtureService
      */
     private function addDataObjectHasOneFields(DataObject $dataObject): void
     {
-        // The Group should already exist at this point
-        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
-
-        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
-        if ($group === null) {
-            throw new Exception(sprintf('Unable to find Group "%s"', $dataObject->ClassName));
-        }
-
         // The Record should already exist at this point
-        $record = $group->getRecordByID($dataObject->ID);
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
         // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
         if ($record === null) {
@@ -255,15 +256,19 @@ class FixtureService
         /** @var array $hasOneRelationships */
         $hasOneRelationships = $dataObject->config()->get('has_one');
 
+        // Nothing for us to do here if there are no defined has_one
         if (!is_array($hasOneRelationships)) {
             return;
         }
 
         foreach ($hasOneRelationships as $fieldName => $relationClassName) {
+            // Relationship field names (as represented in the Database) are always appended with `ID`
             $relationFieldName = sprintf('%sID', $fieldName);
-            // field_classname_map provides devs with the opportunity to describe polymorphic relationships
+            // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
+            // README for details)
             $fieldClassNameMap = $dataObject->config()->get('field_classname_map');
 
+            // Apply the map that has been specified
             if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
                 $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
             }
@@ -297,15 +302,23 @@ class FixtureService
                 continue;
             }
 
-            $relatedObjectID = (int) $dataObject->{$relationFieldName};
+            $relatedObjectId = (int) $dataObject->{$relationFieldName};
 
-            // We cannot query a DataObject. This relationship needs to be described in field_classname_map
+            // We cannot query a DataObject. This relationship needs to be described in field_classname_map (see the
+            // README for details)
             if ($relationClassName === DataObject::class) {
+                $this->addWarning(sprintf(
+                    'Relationship "%s" found in "%s" has only been defined as DataObject. Polymorphic relationships'
+                        . ' need to be described in field_classname_map (see the README for details)',
+                    $relationFieldName,
+                    $dataObject->ClassName
+                ));
+
                 continue;
             }
 
             // Fetch the related DataObject
-            $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
+            $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectId);
 
             // We expect the relationship to be a DataObject
             if (!$relatedObject instanceof DataObject) {
@@ -387,16 +400,8 @@ class FixtureService
      */
     private function addDataObjectManyManyFields(DataObject $dataObject): void
     {
-        // The Group should already exist at this point
-        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
-
-        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
-        if ($group === null) {
-            throw new Exception(sprintf('Unable to find Group "%s"', $dataObject->ClassName));
-        }
-
         // The Record should already exist at this point
-        $record = $group->getRecordByID($dataObject->ID);
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
         // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
         if ($record === null) {
@@ -471,16 +476,8 @@ class FixtureService
      */
     private function addDataObjectManyManyThroughFields(DataObject $dataObject): void
     {
-        // The Group should already exist at this point
-        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
-
-        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
-        if ($group === null) {
-            throw new Exception(sprintf('Unable to find Group "%s"', $dataObject->ClassName));
-        }
-
         // The Record should already exist at this point
-        $record = $group->getRecordByID($dataObject->ID);
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
         // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
         if ($record === null) {
@@ -565,12 +562,12 @@ class FixtureService
      * @param DataObject|FluentExtension $dataObject
      * @throws Exception
      */
-    private function addDataObjectLocalisedFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectLocalisedFields(DataObject $dataObject): void
     {
         $localeCodes = FluentHelper::getLocaleCodesByObjectInstance($dataObject);
         $localisedTables = $dataObject->getLocalisedTables();
 
-        // There are no Localisations for us to export for this DataObject.
+        // There are no Localisations for us to export for this DataObject
         if (count($localeCodes) === 0) {
             return;
         }
@@ -580,12 +577,12 @@ class FixtureService
             return;
         }
 
-        // In order to get the Localised data for this DataObject, we must re-fetch it while we have a FluentState set.
+        // In order to get the Localised data for this DataObject, we must re-fetch it while we have a FluentState set
         $className = $dataObject->ClassName;
         $id = $dataObject->ID;
 
         // We can't add related DataObject from within the FluentState - if we do that, we'll be adding the Localised
-        // record as if it was the base record.
+        // record as if it was the base record
         $relatedDataObjects = [];
 
         foreach ($localeCodes as $locale) {
@@ -595,17 +592,16 @@ class FixtureService
                     $relatedDataObjects,
                     $locale,
                     $className,
-                    $id,
-                    $currentDepth
+                    $id
                 ): void {
                     $state->setLocale($locale);
 
                     // Re-fetch our DataObject. This time it should be Localised with all of the specific content that
-                    // we need to export for this Locale.
+                    // we need to export for this Locale
                     $localisedDataObject = DataObject::get($className)->byID($id);
 
                     if ($localisedDataObject === null) {
-                        // Let's not break the entire process because of this, but we should flag it up as a warning.
+                        // Let's not break the entire process because of this, but we should flag it up as a warning
                         $this->addWarning(sprintf(
                             'DataObject Localisation could not be found for Class: %s | ID: %s | Locale %s',
                             $className,
@@ -616,19 +612,19 @@ class FixtureService
                         return;
                     }
 
-                    $localisedID = sprintf('%s%s', $id, $locale);
+                    $localisedId = sprintf('%s%s', $id, $locale);
 
                     foreach ($localisedTables as $localisedTable => $localisedFields) {
                         $localisedTableName = sprintf('%s_%s', $localisedTable, FluentExtension::SUFFIX);
-                        $record = $this->findOrCreateRecordByClassNameId($localisedTableName, $localisedID);
+                        $record = $this->findOrCreateRecordByClassNameId($localisedTableName, $localisedId);
 
                         $record->addFieldValue('RecordID', sprintf('=>%s.%s', $className, $id));
                         $record->addFieldValue('Locale', $locale);
 
                         foreach ($localisedFields as $localisedField) {
-                            $isIDField = (substr($localisedField, -2) === 'ID');
+                            $isIdField = (substr($localisedField, -2) === 'ID');
 
-                            if ($isIDField) {
+                            if ($isIdField) {
                                 $relationshipName = substr($localisedField, 0, -2);
 
                                 $fieldValue = $localisedDataObject->relField($relationshipName);
@@ -643,18 +639,12 @@ class FixtureService
                                 continue;
                             }
 
-                            // Remaining field values are going to be relational values, so we need to check whether or
-                            // not we're already at our max allowed depth before adding those relationships
-                            if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
-                                continue;
-                            }
-
                             if ($fieldValue instanceof DataObject) {
                                 $relatedDataObjects[] = $fieldValue;
 
                                 $relationshipValue = sprintf('=>%s.%s', $fieldValue->ClassName, $fieldValue->ID);
 
-                                // Add the relationship field to our current Record.
+                                // Add the relationship field to our current Record
                                 $record->addFieldValue($localisedField, $relationshipValue);
 
                                 continue;
@@ -704,19 +694,19 @@ class FixtureService
     {
         $group = $this->findOrCreateGroupByClassName($className);
 
-        // The Group should have been available. If it isn't, that's a paddlin.
+        // The Group should have been available. If it isn't, that's a paddlin
         if ($group === null) {
             throw new Exception(sprintf('Group "%s" should have been available', $className));
         }
 
-        $record = $group->getRecordByID($id);
+        $record = $group->getRecordById($id);
 
-        // If the Record already exists, then we can just return it.
+        // If the Record already exists, then we can just return it
         if ($record !== null) {
             return $record;
         }
 
-        // Create and add the new Record, and then return it.
+        // Create and add the new Record, and then return it
         $record = Record::create($id);
         $group->addRecord($record);
 
