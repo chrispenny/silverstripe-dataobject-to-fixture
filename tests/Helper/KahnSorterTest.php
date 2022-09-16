@@ -16,12 +16,6 @@ class KhanSorterTest extends SapphireTest
     public function testSorter(): void
     {
         $items = [
-            'bigOlStew' => [
-                'thingy',
-                'pig',
-                'cheeseDanish',
-                'chicken',
-            ],
             'cheeseDanish' => [
                 'flour',
                 'butter',
@@ -34,20 +28,9 @@ class KhanSorterTest extends SapphireTest
                 'milk',
                 'salt',
             ],
-            'thingy' => [
-                'iron',
-                'apple',
-                'vanilla',
-            ],
             'creamCheese' => [
                 'milk',
                 'salt',
-            ],
-            'chicken' => [
-                'worm',
-            ],
-            'worm' => [
-                'apple',
             ],
             'egg' => [
                 'chicken',
@@ -55,47 +38,34 @@ class KhanSorterTest extends SapphireTest
             'milk' => [
                 'cow',
             ],
-            'cow' => [
-                'grass',
-            ],
-            'pig' => [
-                'apple',
-                'worm',
-            ],
+            'cow' => [],
+            'chicken' => [],
         ];
 
-        $sorter = new KahnSorter($items);
-        $results = $sorter->sort();
+        $expected = [
+            'cow',
+            'salt',
+            'milk',
+            'chicken',
+            'sugar',
+            'creamCheese',
+            'vanilla',
+            'egg',
+            'butter',
+            'flour',
+            'cheeseDanish',
+        ];
 
-        $this->assertEquals(
-            [
-                'iron',
-                'apple',
-                'vanilla',
-                'thingy',
-                'worm',
-                'pig',
-                'flour',
-                'grass',
-                'cow',
-                'milk',
-                'salt',
-                'butter',
-                'chicken',
-                'egg',
-                'creamCheese',
-                'sugar',
-                'cheeseDanish',
-                'bigOlStew',
-            ],
-            $results
-        );
+        $sorter = new KahnSorter();
+        $results = $sorter->process($items);
+
+        $this->assertEquals($expected, $results);
     }
 
     public function testEmptySort(): void
     {
-        $sorter = new KahnSorter([]);
-        $results = $sorter->sort();
+        $sorter = new KahnSorter();
+        $results = $sorter->process([]);
 
         $this->assertEquals([], $results);
     }

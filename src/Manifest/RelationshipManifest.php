@@ -16,6 +16,13 @@ class RelationshipManifest
 
     private array $manyManyRelationships = [];
 
+    private KahnSorter $kahnSorter;
+
+    public function __construct()
+    {
+        $this->kahnSorter = new KahnSorter();
+    }
+
     public function getRelationships(): array
     {
         return $this->relationships;
@@ -192,11 +199,27 @@ class RelationshipManifest
         return in_array($relationshipName, $exclusions, true);
     }
 
+    public function processRelationshipManifest(): void
+    {
+        $this->kahnSorter->process($this->getRelationships());
+    }
+
     public function getPrioritisedOrder(): array
     {
-        $kahnSorter = new KahnSorter($this->getRelationships());
+        if (!$this->kahnSorter->hasProcessed()) {
+            $this->kahnSorter->process($this->getRelationships());
+        }
 
-        return $kahnSorter->sort();
+        return $this->kahnSorter->getSortedNodes();
+    }
+
+    public function getPrioritisedOrderErrors(): array
+    {
+        if (!$this->kahnSorter->hasProcessed()) {
+            $this->kahnSorter->process($this->getRelationships());
+        }
+
+        return $this->kahnSorter->getWarnings();
     }
 
     public function getExcludedRelationships(): array

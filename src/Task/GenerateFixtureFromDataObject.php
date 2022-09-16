@@ -236,6 +236,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         $service = FixtureService::create();
 
         $service->addDataObject($dataObject);
+        $output = $service->outputFixture();
 
         echo '<div style="clear: both;"></div>';
 
@@ -251,7 +252,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '</div>';
 
         echo '<p><strong>Fixture output:</strong></p>';
-        echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $service->outputFixture());
+        echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $output);
     }
 
     protected function outputStyles(): void

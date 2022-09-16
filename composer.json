@@ -23,7 +23,6 @@
   },
   "require-dev": {
     "phpunit/phpunit": "^9.5",
-    "tractorcow/silverstripe-fluent": ">=4.2.0",
     "slevomat/coding-standard": "^8"
   },
   "autoload": {

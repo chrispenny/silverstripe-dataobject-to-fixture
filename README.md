@@ -157,17 +157,50 @@ App\Models\MyModel:
 
 ## Common issues
 
-### Nesting level of '256' reached
+### Parent Pages included in your export
 
-Above are three options that you can use to attempt to reduce this.
+When you're exporting Pages, if that Page has a `Parent`, then that `Parent` is considered a valid relationship, and
+so it will get exported along with the Page you've selected.
 
-- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
+I'm still considering what to do about this, but for now, I would probably recommend that you add `Parent` to the list
+of excluded relationships for `SiteTree`:
+
+```yaml
+SilverStripe\CMS\Model\SiteTree:
+    excluded_fixture_relationships:
+        - Parent
+```
+
+### Node `[YourClass]` has `[x]` left over dependencies, and so could not be sorted
+
+This generally happens when you have a looping relationship. EG: `Page` `has_one` `Link`, and `Link` `has_one` back to
+`Page`. The sorter cannot determine which class should be prioritised above the other.
+
+This doesn't necessarily mean that things will break, but it's worth reviewing. You might find that you can exclude one
+of the relationships in order to make thing more consistent.
+
+A good example of this is in Elemental. Elemental provides an extension called `TopPage` which provides a relationship
+directly from each `BaseElement` to the `Page` that it belongs to (it's like a "index" so that you can loop up your
+`Page` from the `BaseElement` with less DB queries). This is handy for developers, but less handy for YAML fixtures.
+We'd actually prefer to exclude this relationship and follow the correct relationship flow from `Page` to
+`ElementalArea` to `BaseElement`.
+
+I could exclude this relationship by adding the following configuration:
+```yaml
+DNADesign\Elemental\Models\BaseElement:
+  excluded_fixture_relationships:
+    - TopPage
+```
+
+### Request timeout when generating fixtures
+
+Above are two options that you can use to attempt to reduce this.
+
 - [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
 
 I would recommend that you begin by exluding classes that you don't need for your export, then move to excluding
-specific relationships that might be causing deep levels of nested relationships, and finally, if those fail, you can
-set a max depth.
+specific relationships that might be causing deep levels of nested relationships.
 
 ### DataObject::get() cannot query non-subclass DataObject directly
 
@@ -204,21 +237,12 @@ method.
 
 - `has_one`
 - `has_many`
-- `many_many` where a `through` relationship has been defined.
-
-## Unsupported relationships
-
-- `many_many` where **no** `through` relationship has been defined (you should be using `through`.... Use `through`).
-- `has_one` relationships that result in a loop of relationships (`belongs_to` is the "backward" definition for a
-`has_one` relationship, unfortunately, this is not currently supported in fixtures, so, we have no way to create a
-fixture for relationships that loop).
+- `many_many` (with and without `through` definitions)
 
 ## Fluent support
 
-It is my intention to support Fluent and exporting Localised fields.
-
-Current state *does* support this, but, again, this is still very early development, so you should be validating
-everything before you just go right ahead and assume it's perfect.
+It is my intention to support Fluent and exporting Localised fields in the future, but at this time, there is no
+support provided.
 
 ## Future features
 

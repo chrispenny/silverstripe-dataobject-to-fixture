@@ -2,7 +2,6 @@
 
 namespace ChrisPenny\DataObjectToFixture\Service;
 
-use ChrisPenny\DataObjectToFixture\Helper\FluentHelper;
 use ChrisPenny\DataObjectToFixture\Manifest\FixtureManifest;
 use ChrisPenny\DataObjectToFixture\Manifest\RelationshipManifest;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
@@ -12,12 +11,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\HasManyList;
-use SilverStripe\ORM\RelationList;
 use Symfony\Component\Yaml\Yaml;
-use TractorCow\Fluent\Extension\FluentExtension;
-use TractorCow\Fluent\Model\Locale;
-use TractorCow\Fluent\State\FluentState;
 
 class FixtureService
 {
@@ -80,36 +74,7 @@ class FixtureService
      */
     public function outputFixture(): string
     {
-        // One last thing we need to do before we output this, is make sure, if we're using Fluent, that we've added
-        // each of our Locales to the fixture with the highest priority possible
-
-        // This project isn't using Fluent/Locales, so we can return our yaml here
-        if (!class_exists(Locale::class)) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // We are using Fluent, but we don't have any Locales created, so there is nothing for us to add here
-        if (Locale::get()->count() === 0) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // Find/create a Group for Locale so that we can set it as our highest priority
-        $group = $this->findOrCreateGroupByClassName(Locale::class);
-
-        // Only add the Locale Records if this Group was/is new
-        if ($group->isNew()) {
-            $this->relationshipManifest->addGroup($group);
-
-            /** @var DataList|Locale[] $locales */
-            $locales = Locale::get();
-
-            // Add all Locale Records
-            foreach ($locales as $locale) {
-                $this->addDataObject($locale);
-            }
-        }
-
-        return Yaml::dump($this->toArray(), 3);
+        return Yaml::dump($this->toArray(), 4);
     }
 
     private function toArray(): array
@@ -124,7 +89,16 @@ class FixtureService
         // getPrioritisedOrder() uses our KahnSorter to arrange our fixture (as best we can) with dependencies at the
         // top of the fixture
         // Note: This isn't actually as important now that Populate supports "retries"
-        foreach ($this->relationshipManifest->getPrioritisedOrder() as $className) {
+        $prioritisedOrder = $this->relationshipManifest->getPrioritisedOrder();
+        $prioritisedOrderErrors = $this->relationshipManifest->getPrioritisedOrderErrors();
+
+        // There would have been some dependencies that we could not resolve (most likely they had a direct looping
+        // relationship)
+        foreach ($prioritisedOrderErrors as $prioritisedOrderError) {
+            $this->addWarning($prioritisedOrderError);
+        }
+
+        foreach ($prioritisedOrder as $className) {
             $group = $this->fixtureManifest->getGroupByClassName($className);
 
             // Sanity check, but this should always be present if it was represented in our PrioritisedOrder
@@ -188,11 +162,6 @@ class FixtureService
 
         // Add the standard DB fields for this record
         $this->addDataObjectDbFields($dataObject);
-
-        // If the DataObject has Fluent applied, then we also need to add Localised fields
-        if ($dataObject->hasExtension(FluentExtension::class)) {
-            $this->addDataObjectLocalisedFields($dataObject);
-        }
 
         // Add direct has_one relationships
         $this->addDataObjectHasOneFields($dataObject);
@@ -261,9 +230,9 @@ class FixtureService
             return;
         }
 
-        foreach ($hasOneRelationships as $fieldName => $relationClassName) {
+        foreach ($hasOneRelationships as $relationshipName => $relationClassName) {
             // Relationship field names (as represented in the Database) are always appended with `ID`
-            $relationFieldName = sprintf('%sID', $fieldName);
+            $relationFieldName = sprintf('%sID', $relationshipName);
             // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
             // README for details)
             $fieldClassNameMap = $dataObject->config()->get('field_classname_map');
@@ -284,7 +253,7 @@ class FixtureService
             // Check to see if this particular relationship wants to be excluded
             $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
                 $dataObject->ClassName,
-                $fieldName
+                $relationshipName
             );
 
             // Yup, exclude this relationship
@@ -555,117 +524,6 @@ class FixtureService
 
             // Add all of these relationships to our Record
             $record->addFieldValue($relationFieldName, $resolvedRelationships);
-        }
-    }
-
-    /**
-     * @param DataObject|FluentExtension $dataObject
-     * @throws Exception
-     */
-    private function addDataObjectLocalisedFields(DataObject $dataObject): void
-    {
-        $localeCodes = FluentHelper::getLocaleCodesByObjectInstance($dataObject);
-        $localisedTables = $dataObject->getLocalisedTables();
-
-        // There are no Localisations for us to export for this DataObject
-        if (count($localeCodes) === 0) {
-            return;
-        }
-
-        // Somehow... there aren't any Localised tables for this DataObject?
-        if (count($localisedTables) === 0) {
-            return;
-        }
-
-        // In order to get the Localised data for this DataObject, we must re-fetch it while we have a FluentState set
-        $className = $dataObject->ClassName;
-        $id = $dataObject->ID;
-
-        // We can't add related DataObject from within the FluentState - if we do that, we'll be adding the Localised
-        // record as if it was the base record
-        $relatedDataObjects = [];
-
-        foreach ($localeCodes as $locale) {
-            FluentState::singleton()->withState(
-                function (FluentState $state) use (
-                    $localisedTables,
-                    $relatedDataObjects,
-                    $locale,
-                    $className,
-                    $id
-                ): void {
-                    $state->setLocale($locale);
-
-                    // Re-fetch our DataObject. This time it should be Localised with all of the specific content that
-                    // we need to export for this Locale
-                    $localisedDataObject = DataObject::get($className)->byID($id);
-
-                    if ($localisedDataObject === null) {
-                        // Let's not break the entire process because of this, but we should flag it up as a warning
-                        $this->addWarning(sprintf(
-                            'DataObject Localisation could not be found for Class: %s | ID: %s | Locale %s',
-                            $className,
-                            $id,
-                            $locale
-                        ));
-
-                        return;
-                    }
-
-                    $localisedId = sprintf('%s%s', $id, $locale);
-
-                    foreach ($localisedTables as $localisedTable => $localisedFields) {
-                        $localisedTableName = sprintf('%s_%s', $localisedTable, FluentExtension::SUFFIX);
-                        $record = $this->findOrCreateRecordByClassNameId($localisedTableName, $localisedId);
-
-                        $record->addFieldValue('RecordID', sprintf('=>%s.%s', $className, $id));
-                        $record->addFieldValue('Locale', $locale);
-
-                        foreach ($localisedFields as $localisedField) {
-                            $isIdField = (substr($localisedField, -2) === 'ID');
-
-                            if ($isIdField) {
-                                $relationshipName = substr($localisedField, 0, -2);
-
-                                $fieldValue = $localisedDataObject->relField($relationshipName);
-                            } else {
-                                $fieldValue = $localisedDataObject->relField($localisedField);
-                            }
-
-                            // Check if this is a "regular" field value, if it is then add it and continue
-                            if (!$fieldValue instanceof DataObject && !$fieldValue instanceof RelationList) {
-                                $record->addFieldValue($localisedField, $fieldValue);
-
-                                continue;
-                            }
-
-                            if ($fieldValue instanceof DataObject) {
-                                $relatedDataObjects[] = $fieldValue;
-
-                                $relationshipValue = sprintf('=>%s.%s', $fieldValue->ClassName, $fieldValue->ID);
-
-                                // Add the relationship field to our current Record
-                                $record->addFieldValue($localisedField, $relationshipValue);
-
-                                continue;
-                            }
-
-                            if ($fieldValue instanceof HasManyList) {
-                                foreach ($fieldValue as $relatedDataObject) {
-                                    $relatedDataObjects[] = $relatedDataObject;
-                                }
-                            }
-
-                            // No other field types are supported (EG: ManyManyList)
-                        }
-                    }
-                }
-            );
-        }
-
-        foreach ($relatedDataObjects as $relatedDataObject) {
-            // Add the related DataObject to the stack to be processed
-            $this->dataObjectStack[] = $relatedDataObject;
         }
     }
 
