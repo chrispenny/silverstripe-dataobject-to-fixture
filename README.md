@@ -84,6 +84,9 @@ $page = Page::get()->byID(1);
 // Add the DataObject to the Service.
 $service->addDataObject($dataObject);
 
+// Generating the fixture can also generate new warnings
+$output = $service->outputFixture();
+
 // Check for warnings? This is somewhat important, because if you have looping relationships (which we have no way of
 // creating fixtures for at the moment) this is how you'll know about it.
 if (count($service->getWarnings()) > 0) {
@@ -91,7 +94,7 @@ if (count($service->getWarnings()) > 0) {
 }
 
 // Do something with the fixture output.
-highlight_string($service->outputFixture());
+highlight_string($output);
 
 // Or maybe save the output to a file?
 $fixture = Director::baseFolder() . '/app/resources/fixture.yml';
