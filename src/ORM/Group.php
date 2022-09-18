@@ -37,7 +37,7 @@ class Group
     /**
      * @param mixed $id
      */
-    public function getRecordByID($id): ?Record
+    public function getRecordById($id): ?Record
     {
         if (!array_key_exists($id, $this->records)) {
             return null;

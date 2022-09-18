@@ -2,7 +2,6 @@
 
 namespace ChrisPenny\DataObjectToFixture\Service;
 
-use ChrisPenny\DataObjectToFixture\Helper\FluentHelper;
 use ChrisPenny\DataObjectToFixture\Manifest\FixtureManifest;
 use ChrisPenny\DataObjectToFixture\Manifest\RelationshipManifest;
 use ChrisPenny\DataObjectToFixture\ORM\Group;
@@ -12,12 +11,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\HasManyList;
-use SilverStripe\ORM\RelationList;
 use Symfony\Component\Yaml\Yaml;
-use TractorCow\Fluent\Extension\FluentExtension;
-use TractorCow\Fluent\Model\Locale;
-use TractorCow\Fluent\State\FluentState;
 
 class FixtureService
 {
@@ -28,74 +22,51 @@ class FixtureService
 
     private ?RelationshipManifest $relationshipManifest;
 
-    private bool $validated = false;
-
     private array $warnings = [];
 
-    private ?int $allowedDepth = null; // phpcs:ignore
+    private ?int $allowedDepth = null;
+
+    private ?array $toArrayCached = null;
+
+    /**
+     * @var DataObject[]
+     */
+    private array $dataObjectStack = [];
 
     public function __construct()
     {
+        // The Fixture manifest is a simple (ish) mapping of Groups (classes) and Records (DataObjects). For example,
+        // the Group under the key `Page` will contain any/all Page DataObjects that were added to the fixture
         $this->fixtureManifest = new FixtureManifest();
+        // The RelationshipManifest is a simple mapping of Class names and what other Classes they have relationships
+        // to. This will allow us to order (as best we can) our FixtureManifest later on
         $this->relationshipManifest = new RelationshipManifest();
+    }
+
+    public function getWarnings(): array
+    {
+        return $this->warnings;
     }
 
     /**
      * @throws Exception
      */
-    public function addDataObject(DataObject $dataObject, int $currentDepth = 0): FixtureService
+    public function addDataObject(DataObject $dataObject): void
     {
-        // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
-        if (!$dataObject->isInDB()) {
-            throw new Exception('Your DataObject must be in the DB');
+        // Remove our cached array fixture, as you've just added another DataObject
+        $this->toArrayCached = null;
+
+        // Add this initial DataObject to the stack that we'll process
+        $this->dataObjectStack[] = $dataObject;
+
+        // Keep running until the stack is empty
+        while ($this->dataObjectStack) {
+            // Drop out the next item in the stack
+            $dataObject = array_shift($this->dataObjectStack);
+
+            // processDataObject() can itself add more DataObjects to the stack to be processed
+            $this->processDataObject($dataObject);
         }
-
-        $currentDepth += 1;
-
-        // Any time we add a new DataObject, we need to set validated back to false.
-        $this->validated = false;
-
-        // Find or create a record based on the DataObject you want to add.
-        $record = $this->findOrCreateRecordByClassNameID($dataObject->ClassName, $dataObject->ID);
-
-        // This addDataObject() method gets called many times as we try to build out the structure of related
-        // DataObjects. It's quite likely that the we will come across the same record multiple times. We only need
-        // to add it once.
-        if (!$record->isNew()) {
-            return $this;
-        }
-
-        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
-
-        if ($group === null) {
-            throw new Exception(sprintf('Group for class should have been available: %s', $dataObject->ClassName));
-        }
-
-        // Add this record to our relationship manifest
-        $this->relationshipManifest->addGroup($group);
-        // Add the standard DB fields for this record
-        $this->addDataObjectDBFields($dataObject);
-
-        // If the DataObject has Fluent applied, then we also need to add Localised fields.
-        if ($dataObject->hasExtension(FluentExtension::class)) {
-            $this->addDataObjectLocalisedFields($dataObject, $currentDepth);
-        }
-
-        if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
-            return $this;
-        }
-
-        // Add direct relationships.
-        $this->addDataObjectHasOneFields($dataObject, $currentDepth);
-        // Add belongs to relationships.
-        $this->addDataObjectBelongsToFields($dataObject, $currentDepth);
-        // has_many fields will include any relationships that you're created using many_many "through".
-        $this->addDataObjectHasManyFields($dataObject, $currentDepth);
-        // many_many relationships without a "through" object are not supported. Add warning for any relationships
-        // we find like that.
-        $this->addDataObjectManyManyFieldWarnings($dataObject);
-
-        return $this;
     }
 
     /**
@@ -103,82 +74,46 @@ class FixtureService
      */
     public function outputFixture(): string
     {
-        // One last thing we need to do before we output this, is make sure, if we're using Fluent, that we've added
-        // each of our Locales to the fixture with the highest priority possible.
-        if (!class_exists(Locale::class)) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // We don't have any Locales created, so there is nothing for us to add here.
-        if (Locale::get()->count() === 0) {
-            return Yaml::dump($this->toArray(), 3);
-        }
-
-        // Find/create a Group for Locale so that we can set it as our highest priority.
-        $group = $this->findOrCreateGroupByClassName(Locale::class);
-
-        // Only add the Locale Records if this Group was/is new.
-        if ($group->isNew()) {
-            $this->relationshipManifest->addGroup($group);
-
-            /** @var DataList|Locale[] $locales */
-            $locales = Locale::get();
-
-            // Add all Locale Records.
-            foreach ($locales as $locale) {
-                $this->addDataObject($locale);
-            }
-        }
-
-        // Make sure our groups are organised in the best order that we can figure out.
-        $this->validateRelationships();
-
-        return Yaml::dump($this->toArray(), 3);
+        return Yaml::dump($this->toArray(), 4);
     }
 
-    public function getWarnings(): array
+    private function toArray(): array
     {
-        // Make sure this is done before returning our warnings.
-        $this->validateRelationships();
-
-        return $this->warnings;
-    }
-
-    public function getAllowedDepth(): ?int
-    {
-        return $this->allowedDepth;
-    }
-
-    public function setAllowedDepth(?int $allowedDepth = null): FixtureService
-    {
-        if ($allowedDepth === 0) {
-            $this->addWarning('You set an allowed depth of 0. We have assumed you meant 1.');
-
-            $allowedDepth = 1;
+        // If we have a cache of this array already, then return it now
+        if ($this->toArrayCached !== null) {
+            return $this->toArrayCached;
         }
 
-        $this->allowedDepth = $allowedDepth;
-
-        return $this;
-    }
-
-    protected function toArray(): array
-    {
         $toArrayGroups = [];
 
-        foreach ($this->relationshipManifest->getPrioritisedOrder() as $className) {
+        // getPrioritisedOrder() uses our KahnSorter to arrange our fixture (as best we can) with dependencies at the
+        // top of the fixture
+        // Note: This isn't actually as important now that Populate supports "retries"
+        $prioritisedOrder = $this->relationshipManifest->getPrioritisedOrder();
+        $prioritisedOrderErrors = $this->relationshipManifest->getPrioritisedOrderErrors();
+
+        // There would have been some dependencies that we could not resolve (most likely they had a direct looping
+        // relationship)
+        foreach ($prioritisedOrderErrors as $prioritisedOrderError) {
+            $this->addWarning($prioritisedOrderError);
+        }
+
+        foreach ($prioritisedOrder as $className) {
             $group = $this->fixtureManifest->getGroupByClassName($className);
 
+            // Sanity check, but this should always be present if it was represented in our PrioritisedOrder
             if (!$group) {
                 continue;
             }
 
+            // Grab all the records for this Group
             $records = $group->toArray();
 
+            // Rather than break here, we'll add a warning, as there really should have been records
             if (count($records) === 0) {
                 $this->addWarning(sprintf(
                     'Fixture output: No records were found for Group/ClassName "%s". You might need to check that you'
-                        . ' do not have any relationships pointing to this Group/ClassName.',
+                    . ' do not have any relationships pointing to this Group/ClassName.',
                     $group->getClassName(),
                 ));
 
@@ -188,22 +123,75 @@ class FixtureService
             $toArrayGroups[$group->getClassName()] = $records;
         }
 
-        return $toArrayGroups;
+        // Update our cache
+        $this->toArrayCached = $toArrayGroups;
+
+        return $this->toArrayCached;
     }
 
     /**
      * @throws Exception
      */
-    protected function addDataObjectDBFields(DataObject $dataObject): void
+    private function processDataObject(DataObject $dataObject): ?Record
     {
-        $record = $this->fixtureManifest->getRecordByClassNameID($dataObject->ClassName, $dataObject->ID);
+        // Check isInDB() rather than exists(), as exists() has additional checks for (eg) Files
+        if (!$dataObject->isInDB()) {
+            throw new Exception('Your DataObject must be in the DB');
+        }
 
+        // Find or create a record based on the DataObject you want to add
+        $record = $this->findOrCreateRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
+
+        // This addDataObject() method gets called many times as we try to build out the structure of related
+        // DataObjects. It's quite likely that we will come across the same record multiple times. We only need
+        // to add it once
+        if (!$record->isNew()) {
+            return $record;
+        }
+
+        // The Group should have been created when we found or created the Record
+        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
+
+        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
+        if ($group === null) {
+            throw new Exception(sprintf('Group for class should have been available: %s', $dataObject->ClassName));
+        }
+
+        // Add this record to our relationship manifest
+        $this->relationshipManifest->addGroup($group);
+
+        // Add the standard DB fields for this record
+        $this->addDataObjectDbFields($dataObject);
+
+        // Add direct has_one relationships
+        $this->addDataObjectHasOneFields($dataObject);
+        // has_many fields may also include relationships that you've created using many_many "through" (so long as
+        // you also defined the has_many)
+        $this->addDataObjectHasManyFields($dataObject);
+        // Add many_many fields that do not contain through relationships
+        $this->addDataObjectManyManyFields($dataObject);
+        // Add many_many fields that contain through relationships
+        $this->addDataObjectManyManyThroughFields($dataObject);
+
+        return $record;
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function addDataObjectDbFields(DataObject $dataObject): void
+    {
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
+
+        // The Record should already exist at this point (as we only call this method processDataObject()
         if ($record === null) {
+            // We should just bail out
             throw new Exception(
                 sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
             );
         }
 
+        // Find all the DB fields that have been configured for this DataObject
         $dbFields = $dataObject->config()->get('db');
 
         if (!is_array($dbFields)) {
@@ -211,7 +199,8 @@ class FixtureService
         }
 
         foreach (array_keys($dbFields) as $fieldName) {
-            // DB fields are pretty simple key => value.
+            // DB fields are pretty simple key => value. Using relField means that we follow Silverstripe convention
+            // for if a developer has created any override methods/etc
             $value = $dataObject->relField($fieldName);
 
             $record->addFieldValue($fieldName, $value);
@@ -221,16 +210,12 @@ class FixtureService
     /**
      * @throws Exception
      */
-    protected function addDataObjectHasOneFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectHasOneFields(DataObject $dataObject): void
     {
-        $group = $this->fixtureManifest->getGroupByClassName($dataObject->ClassName);
+        // The Record should already exist at this point
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
-        if ($group === null) {
-            throw new Exception(sprintf('Unable to find Group "%s"', $dataObject->ClassName));
-        }
-
-        $record = $group->getRecordByID($dataObject->ID);
-
+        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
         if ($record === null) {
             throw new Exception(
                 sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
@@ -240,54 +225,71 @@ class FixtureService
         /** @var array $hasOneRelationships */
         $hasOneRelationships = $dataObject->config()->get('has_one');
 
+        // Nothing for us to do here if there are no defined has_one
         if (!is_array($hasOneRelationships)) {
             return;
         }
 
-        foreach ($hasOneRelationships as $fieldName => $relationClassName) {
-            $relationFieldName = sprintf('%sID', $fieldName);
+        foreach ($hasOneRelationships as $relationshipName => $relationClassName) {
+            // Relationship field names (as represented in the Database) are always appended with `ID`
+            $relationFieldName = sprintf('%sID', $relationshipName);
+            // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
+            // README for details)
             $fieldClassNameMap = $dataObject->config()->get('field_classname_map');
 
+            // Apply the map that has been specified
             if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
                 $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
             }
 
-            // This class has requested that it not be included in relationship maps.
+            // Check to see if class has requested that it not be included in relationship maps
             $excludeClass = Config::inst()->get($relationClassName, 'exclude_from_fixture_relationships');
 
+            // Yup, exclude this class
             if ($excludeClass) {
                 continue;
             }
 
+            // Check to see if this particular relationship wants to be excluded
             $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
                 $dataObject->ClassName,
-                $fieldName
+                $relationshipName
             );
 
+            // Yup, exclude this relationship
             if ($excludeRelationship) {
                 continue;
             }
 
-            // If there is no value, then, we have a relationship field, but no relationship active.
+            // If there is no value, then, we have a relationship field, but no relationship active
             if (!$dataObject->hasValue($relationFieldName)) {
                 continue;
             }
 
-            // We expect this value to be an ID for a related object.
+            // We expect this value to be an ID for a related object, if it's not an INT, then that's invalid
             if (!is_numeric($dataObject->{$relationFieldName})) {
                 continue;
             }
 
-            $relatedObjectID = (int) $dataObject->{$relationFieldName};
+            $relatedObjectId = (int) $dataObject->{$relationFieldName};
 
-            // We cannot query a DataObject
+            // We cannot query a DataObject. This relationship needs to be described in field_classname_map (see the
+            // README for details)
             if ($relationClassName === DataObject::class) {
+                $this->addWarning(sprintf(
+                    'Relationship "%s" found in "%s" has only been defined as DataObject. Polymorphic relationships'
+                        . ' need to be described in field_classname_map (see the README for details)',
+                    $relationFieldName,
+                    $dataObject->ClassName
+                ));
+
                 continue;
             }
 
-            $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectID);
+            // Fetch the related DataObject
+            $relatedObject = DataObject::get($relationClassName)->byID($relatedObjectId);
 
-            // We expect the relationship to be a DataObject.
+            // We expect the relationship to be a DataObject
             if (!$relatedObject instanceof DataObject) {
                 $this->addWarning(sprintf(
                     'Related Object "%s" found on "%s" was not a DataObject',
@@ -298,59 +300,25 @@ class FixtureService
                 continue;
             }
 
-            // @todo: this method currently returns false as belongs_to is not supported in fixtures atm.
-            // Don't add the relationship here, we'll add it as part of the belongs to relationship additions.
-            if ($this->hasBelongsToRelationship($relatedObject, $dataObject->ClassName, $fieldName)) {
-                continue;
-            }
-
+            // Build out the value that we want to use in our Fixture. This should be a "relationship" value
             $relationshipValue = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 
-            // Add the relationship field to our current Record.
+            // Add the relationship field to our current Record
             $record->addFieldValue($relationFieldName, $relationshipValue);
 
-            // Add the related DataObject.
-            $this->addDataObject($relatedObject, $currentDepth);
+            // Add a relationship map for these Groups. That being, our origin DataObject class relies on the related
+            // DataObject class (EG: Page has ElementalArea)
+            $this->relationshipManifest->addRelationship($dataObject->ClassName, $relatedObject->ClassName);
 
-            // Find the Group for the DataObject that we should have just added.
-            $relatedGroup = $this->fixtureManifest->getGroupByClassName($relatedObject->ClassName);
-
-            if ($relatedGroup === null) {
-                throw new Exception(sprintf('Unable to find Group "%s"', $relatedObject->ClassName));
-            }
-
-            // Add a relationship map for these Groups.
-            $this->relationshipManifest->addRelationshipFromTo($group, $relatedGroup);
+            // Add the related DataObject to the stack to be processed
+            $this->dataObjectStack[] = $relatedObject;
         }
-    }
-
-    /**
-     * @phpcs:disable
-     */
-    protected function addDataObjectBelongsToFields(DataObject $dataObject, int $currentDepth = 0): void
-    {
-        // belongs_to fixture definitions don't appear to be support currently. This is how we can eventually solve
-        // looping relationships though...
-        return;
-    }
-
-    /**
-     * @phpcs:disable
-     */
-    protected function hasBelongsToRelationship(
-        DataObject $dataObject,
-        string $fromObjectClassName,
-        string $fromRelationship
-    ): bool {
-        // Belongs to fixture definitions don't appear to be support currently. This is how we can eventually solve
-        // looping relationships though...
-        return false;
     }
 
     /**
      * @throws Exception
      */
-    protected function addDataObjectHasManyFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectHasManyFields(DataObject $dataObject): void
     {
         /** @var array $hasManyRelationships */
         $hasManyRelationships = $dataObject->config()->get('has_many');
@@ -365,192 +333,204 @@ class FixtureService
             // Relationships are sometimes defined as ClassName.FieldName. Drop the .FieldName
             $cleanRelationshipClassName = strtok($relationClassName, '.');
             // Use Schema to make sure that this relationship has a reverse has_one created. This will throw an
-            // Exception if there isn't (SilverStripe always expects you to have it).
+            // Exception if there isn't (SilverStripe always expects you to have it)
             $schema->getRemoteJoinField($dataObject->ClassName, $relationFieldName, 'has_many');
 
-            // This class has requested that it not be included in relationship maps.
+            // Check to see if this class has requested that it not be included in relationship maps
             $excludeClass = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
 
+            // Yup, exclude this class
             if ($excludeClass) {
                 continue;
             }
 
+            // Check to see if this particular relationship wants to be excluded
             $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
                 $dataObject->ClassName,
                 $relationFieldName
             );
 
+            // Yup, exclude this relationship
             if ($excludeRelationship) {
                 continue;
             }
 
             // If we have the correct relationship mapping (a "has_one" relationship on the object in the "has_many"),
-            // then we can simply add each of these records and let the "has_one" be added by addRecordHasOneFields().
+            // then we can simply add each of these records and let the "has_one" be added by addRecordHasOneFields()
             foreach ($dataObject->relField($relationFieldName) as $relatedObject) {
-                // Add the related DataObject. Recursion starts.
-                $this->addDataObject($relatedObject, $currentDepth);
+                // Add the related DataObject to the stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
             }
         }
     }
 
-    protected function addDataObjectManyManyFieldWarnings(DataObject $dataObject): void
+    /**
+     * @throws Exception
+     */
+    private function addDataObjectManyManyFields(DataObject $dataObject): void
     {
-        /** @var array $manyManyRelationships */
+        // The Record should already exist at this point
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
+
+        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
+        if ($record === null) {
+            throw new Exception(
+                sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
+            );
+        }
+
         $manyManyRelationships = $dataObject->config()->get('many_many');
 
         if (!is_array($manyManyRelationships)) {
             return;
         }
 
-        if (count($manyManyRelationships) === 0) {
-            return;
-        }
-
-        foreach ($manyManyRelationships as $relationshipName => $relationshipValue) {
-            // This many_many relationship has a "through" object, so we're all good.
-            if (is_array($relationshipValue) && array_key_exists('through', $relationshipValue)) {
+        foreach ($manyManyRelationships as $relationFieldName => $relationClassName) {
+            // many_many relationships can also be defined with a through object. These are handled by the
+            // addDataObjectManyManyThroughFields() method
+            if (is_array($relationClassName)) {
                 continue;
             }
 
-            // This many_many relationship is being excluded anyhow, so we're also all good here.
-            $exclude = Config::inst()->get($relationshipValue, 'exclude_from_fixture_relationships');
+            // TL;DR: many_many is really tough. Developers could choose to define it only in one direction, or in
+            // both directions, and they could choose to define it either with, or without dot notation in either
+            // direction
 
-            if ($exclude) {
-                continue;
-            }
-
-            // Ok, so, you're probably expecting the fixture to include this relationship... but it won't. Here's your
-            // warning.
-            $this->addWarning(sprintf(
-                'many_many relationships without a "through" are not supported. No yml generated for '
-                    . 'relationship: %s::%s()',
+            $hasManyManyRelationship = $this->relationshipManifest->hasManyManyRelationship(
                 $dataObject->ClassName,
-                $relationshipName
-            ));
+                $relationFieldName,
+                $relationClassName
+            );
+
+            // This many_many relationship has already been represented, so we don't want to add it again
+            // Note: many_many relationship can be defined on one, or both sides of the relationship, but it can only
+            // be represented once in our fixture
+            if ($hasManyManyRelationship) {
+                continue;
+            }
+
+            // Track that this many_many relationship has been represented already, so that when we addDataObject()
+            // below we don't cause infinite recursion
+            $this->relationshipManifest->addManyManyRelationship(
+                $dataObject->ClassName,
+                $relationFieldName,
+                $relationClassName
+            );
+
+            // We're going to add these many_many relationships as an array
+            $resolvedRelationships = [];
+            /** @var DataList|DataObject[] $relatedObjects */
+            $relatedObjects = $dataObject->relField($relationFieldName);
+
+            foreach ($relatedObjects as $relatedObject) {
+                // Add the related DataObject as one of our resolved relationships
+                $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
+
+                // Add the related DataObject to our stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
+            }
+
+            // There are no relationships for us to track
+            if (!$resolvedRelationships) {
+                continue;
+            }
+
+            // Add all of these relationships to our Record
+            $record->addFieldValue($relationFieldName, $resolvedRelationships);
         }
     }
 
     /**
-     * @param DataObject|FluentExtension $dataObject
      * @throws Exception
      */
-    protected function addDataObjectLocalisedFields(DataObject $dataObject, int $currentDepth = 0): void
+    private function addDataObjectManyManyThroughFields(DataObject $dataObject): void
     {
-        $localeCodes = FluentHelper::getLocaleCodesByObjectInstance($dataObject);
-        $localisedTables = $dataObject->getLocalisedTables();
+        // The Record should already exist at this point
+        $record = $this->fixtureManifest->getRecordByClassNameId($dataObject->ClassName, $dataObject->ID);
 
-        // There are no Localisations for us to export for this DataObject.
-        if (count($localeCodes) === 0) {
-            return;
-        }
-
-        // Somehow... there aren't any Localised tables for this DataObject?
-        if (count($localisedTables) === 0) {
-            return;
-        }
-
-        // In order to get the Localised data for this DataObject, we must re-fetch it while we have a FluentState set.
-        $className = $dataObject->ClassName;
-        $id = $dataObject->ID;
-
-        // We can't add related DataObject from within the FluentState - if we do that, we'll be adding the Localised
-        // record as if it was the base record.
-        $relatedDataObjects = [];
-
-        foreach ($localeCodes as $locale) {
-            FluentState::singleton()->withState(
-                function (FluentState $state) use (
-                    $localisedTables,
-                    $relatedDataObjects,
-                    $locale,
-                    $className,
-                    $id,
-                    $currentDepth
-                ): void {
-                    $state->setLocale($locale);
-
-                    // Re-fetch our DataObject. This time it should be Localised with all of the specific content that
-                    // we need to export for this Locale.
-                    $localisedDataObject = DataObject::get($className)->byID($id);
-
-                    if ($localisedDataObject === null) {
-                        // Let's not break the entire process because of this, but we should flag it up as a warning.
-                        $this->addWarning(sprintf(
-                            'DataObject Localisation could not be found for Class: %s | ID: %s | Locale %s',
-                            $className,
-                            $id,
-                            $locale
-                        ));
-
-                        return;
-                    }
-
-                    $localisedID = sprintf('%s%s', $id, $locale);
-
-                    foreach ($localisedTables as $localisedTable => $localisedFields) {
-                        $localisedTableName = sprintf('%s_%s', $localisedTable, FluentExtension::SUFFIX);
-                        $record = $this->findOrCreateRecordByClassNameID($localisedTableName, $localisedID);
-
-                        $record->addFieldValue('RecordID', sprintf('=>%s.%s', $className, $id));
-                        $record->addFieldValue('Locale', $locale);
-
-                        foreach ($localisedFields as $localisedField) {
-                            $isIDField = (substr($localisedField, -2) === 'ID');
-
-                            if ($isIDField) {
-                                $relationshipName = substr($localisedField, 0, -2);
-
-                                $fieldValue = $localisedDataObject->relField($relationshipName);
-                            } else {
-                                $fieldValue = $localisedDataObject->relField($localisedField);
-                            }
-
-                            // Check if this is a "regular" field value, if it is then add it and continue
-                            if (!$fieldValue instanceof DataObject && !$fieldValue instanceof RelationList) {
-                                $record->addFieldValue($localisedField, $fieldValue);
-
-                                continue;
-                            }
-
-                            // Remaining field values are going to be relational values, so we need to check whether or
-                            // not we're already at our max allowed depth before adding those relationships
-                            if ($this->getAllowedDepth() !== null && $currentDepth > $this->getAllowedDepth()) {
-                                continue;
-                            }
-
-                            if ($fieldValue instanceof DataObject) {
-                                $relatedDataObjects[] = $fieldValue;
-
-                                $relationshipValue = sprintf('=>%s.%s', $fieldValue->ClassName, $fieldValue->ID);
-
-                                // Add the relationship field to our current Record.
-                                $record->addFieldValue($localisedField, $relationshipValue);
-
-                                continue;
-                            }
-
-                            if ($fieldValue instanceof HasManyList) {
-                                foreach ($fieldValue as $relatedDataObject) {
-                                    $relatedDataObjects[] = $relatedDataObject;
-                                }
-                            }
-
-                            // No other field types are supported (EG: ManyManyList)
-                        }
-                    }
-                }
+        // We can't easily recover if it doesn't (mostly because it's unclear *why* it wouldn't be available)
+        if ($record === null) {
+            throw new Exception(
+                sprintf('Unable to find Record "%s" in Group "%s"', $dataObject->ID, $dataObject->ClassName)
             );
         }
 
-        foreach ($relatedDataObjects as $relatedDataObject) {
-            $this->addDataObject($relatedDataObject, $currentDepth);
+        $manyManyRelationships = $dataObject->config()->get('many_many');
+        // many_many with through information can also be tracked in has_many, so we won't want to duplicate our
+        // efforts
+        $hasManyRelationships = $dataObject->config()->get('has_many');
+
+        if (!is_array($manyManyRelationships)) {
+            return;
+        }
+
+        foreach ($manyManyRelationships as $relationFieldName => $relationshipValue) {
+            // This many_many relationship does not contain "through" information, so we don't want to process this here
+            if (!is_array($relationshipValue) || !array_key_exists('through', $relationshipValue)) {
+                continue;
+            }
+
+            // This should always simply be defined as the class name (no dot notation)
+            $throughClass = $relationshipValue['through'];
+            $represented = false;
+
+            // First we'll check if we've already represented this relationship
+            if ($this->relationshipManifest->hasManyManyThroughRelationship($throughClass)) {
+                continue;
+            }
+
+            // Checking to see if this through relationship was also represented in a has_many is a bit of a mission,
+            // as we can't know what the relationship name is, and the class definition could be provided with (or
+            // without) dot notation
+            foreach ($hasManyRelationships as $hasManyRelationship) {
+                // Grab the first array item after the explode(). Doesn't matter if this is dot notation or not, it
+                // should always equal the class name portion of that string
+                [$hasManyClass] = explode('.', $hasManyRelationship);
+
+                // Yup! There is a has_many that already explains this relationship
+                if ($hasManyClass === $throughClass) {
+                    $represented = true;
+
+                    break;
+                }
+            }
+
+            // Skip this relationship, as it's already described by a has_many
+            if ($represented) {
+                continue;
+            }
+
+            // Track that this many_many relationship has been represented already, so that when we addDataObject()
+            // below we don't cause infinite recursion
+            $this->relationshipManifest->addManyManyThroughRelationship($throughClass);
+
+            // We're going to add these many_many relationships as an array
+            $resolvedRelationships = [];
+            /** @var DataList|DataObject[] $relatedObjects */
+            $relatedObjects = $dataObject->relField($relationFieldName);
+
+            foreach ($relatedObjects as $relatedObject) {
+                // Add the related DataObject as one of our resolved relationships
+                $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
+
+                // Add the related DataObject to the stack to be processed
+                $this->dataObjectStack[] = $relatedObject;
+            }
+
+            // There are no relationships for us to track
+            if (!$resolvedRelationships) {
+                continue;
+            }
+
+            // Add all of these relationships to our Record
+            $record->addFieldValue($relationFieldName, $resolvedRelationships);
         }
     }
 
     /**
      * @throws Exception
      */
-    protected function findOrCreateGroupByClassName(string $className): Group
+    private function findOrCreateGroupByClassName(string $className): Group
     {
         $group = $this->fixtureManifest->getGroupByClassName($className);
 
@@ -568,119 +548,30 @@ class FixtureService
      * @param string|int $id
      * @throws Exception
      */
-    protected function findOrCreateRecordByClassNameID(string $className, $id): Record
+    private function findOrCreateRecordByClassNameId(string $className, $id): Record
     {
         $group = $this->findOrCreateGroupByClassName($className);
 
-        // The Group should have been available. If it isn't, that's a paddlin.
+        // The Group should have been available. If it isn't, that's a paddlin
         if ($group === null) {
             throw new Exception(sprintf('Group "%s" should have been available', $className));
         }
 
-        $record = $group->getRecordByID($id);
+        $record = $group->getRecordById($id);
 
-        // If the Record already exists, then we can just return it.
+        // If the Record already exists, then we can just return it
         if ($record !== null) {
             return $record;
         }
 
-        // Create and add the new Record, and then return it.
+        // Create and add the new Record, and then return it
         $record = Record::create($id);
         $group->addRecord($record);
 
         return $record;
     }
 
-    protected function validateRelationships(): void
-    {
-        // We can skip this if no extra DataObjects were added since the last time.
-        if ($this->validated) {
-            return;
-        }
-
-        foreach ($this->relationshipManifest->getRelationships() as $fromClass => $toClasses) {
-            if (count($toClasses) === 0) {
-                continue;
-            }
-
-            $parentage = [$fromClass];
-
-            $this->removeLoopingRelationships($parentage, $toClasses);
-        }
-
-        $this->validated = true;
-    }
-
-    protected function removeLoopingRelationships(array $parentage, array $toClasses): void
-    {
-        $relationships = $this->relationshipManifest->getRelationships();
-
-        foreach ($toClasses as $toClass) {
-            // This To Class does not have any additional relationships that we need to consider.
-            if (!array_key_exists($toClass, $relationships)) {
-                continue;
-            }
-
-            // Grab the To Classes for this child relationship.
-            $childToClass = $relationships[$toClass];
-
-            // Sanity check, but we should only have keys when there are relationships. In any case, if there are no
-            // relationships for this Class, then there is nothing for us to do here.
-            if (count($childToClass) === 0) {
-                continue;
-            }
-
-            // Check to see if there is any intersection between this Classes relationships, and the parentage tree
-            // that we have drawn so far.
-            $loopingRelationships = array_intersect($parentage, $childToClass);
-
-            // If we find an intersection, then we need to remove them. The relationships are removed from the
-            // manifest itself.
-            if (count($loopingRelationships) > 0) {
-                // We can keep the original relationship, but we'll remove the one that loops back to the original.
-                foreach ($loopingRelationships as $loopingRelationship) {
-                    $this->relationshipManifest->removeRelationship($toClass, $loopingRelationship);
-
-                    $this->addWarning(sprintf(
-                        'A relationships was removed between "%s" and "%s". This occurs if we have detected a'
-                            . ' loop . Until belongs_to relationships are supported in fixtures, you might not be able'
-                            . ' to rely on fixtures generated to have the appropriate priority order. You might want to'
-                            . ' consider adding one of these relationships to `excluded_fixture_relationships`.',
-                        $loopingRelationship,
-                        $toClass
-                    ));
-
-                    // Find the Group for the relationship that has a loop.
-                    $group = $this->fixtureManifest->getGroupByClassName($loopingRelationship);
-
-                    if ($group === null) {
-                        continue;
-                    }
-
-                    // Loop through each Record and remove this relationship.
-                    foreach ($group->getRecords() as $record) {
-                        $record->removeRelationshipValueForClass($toClass);
-                    }
-                }
-            }
-
-            // Re-fetch the relationships now that any intersections have been removed.
-            $childToClass = $relationships[$toClass];
-
-            // Check to see if we still have any relationships that need to be traversed.
-            if (count($childToClass) === 0) {
-                continue;
-            }
-
-            $parentage[] = $toClass;
-
-            // This needs to be recursive, rather than a stack (while loop). It's important that we traverse one entire
-            // tree before starting a new one.
-            $this->removeLoopingRelationships($parentage, $childToClass);
-        }
-    }
-
-    protected function addWarning(string $message): void
+    private function addWarning(string $message): void
     {
         if (in_array($message, $this->warnings, true)) {
             return;

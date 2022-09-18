@@ -10,6 +10,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\PaginatedList;
+use Throwable;
 
 /**
  * @codeCoverageIgnore
@@ -19,38 +20,49 @@ class GenerateFixtureFromDataObject extends BuildTask
 
     protected $title = 'Generate Fixture From DataObject'; // phpcs:ignore
 
+    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
+
     private static $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
 
-    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
+    private ?int $previousExecution = null;
 
     /**
      * @param HTTPRequest|mixed $request
      * @throws Exception
      */
-    public function run($request): void
+    public function run($request): void // phpcs:ignore
     {
-        $this->outputStyles();
+        try {
+            $this->previousExecution = ini_get('max_execution_time');
+            ini_set('max_execution_time', 60);
 
-        $className = $request->getVar('ClassName');
-        $id = $request->getVar('ID');
+            $this->outputStyles();
 
-        // We have both a ClassName and ID, which means we can render out the fixture for a particular record
-        if ($className && $id) {
-            $this->outputFixture($request, $className, (int) $id);
+            $className = $request->getVar('ClassName');
+            $id = $request->getVar('ID');
 
-            return;
+            // We have both a ClassName and ID, which means we can render out the fixture for a particular record
+            if ($className && $id) {
+                $this->outputFixture($request, $className, (int)$id);
+
+                return;
+            }
+
+            // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
+            // records for that particular class
+            if ($className) {
+                $this->outputClassForm($request, $className);
+
+                return;
+            }
+
+            // The initial form is a list of available classes
+            $this->outputInitialForm();
+        } catch (Throwable $e) {
+            throw $e;
+        } finally {
+            ini_set('max_execution_time', $this->previousExecution);
         }
-
-        // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
-        // records for that particular class
-        if ($className) {
-            $this->outputClassForm($request, $className);
-
-            return;
-        }
-
-        // The initial form is a list of available classes
-        $this->outputInitialForm();
     }
 
     protected function outputInitialForm(): void
@@ -191,8 +203,6 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
-        $maxDepth = (int) $request->getVar('maxDepth');
-
         /** @var DataObject $dataObject */
         $dataObject = $className::get()->byID($id);
 
@@ -217,12 +227,6 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '<form class="depth-form" action="" method="get">';
         echo sprintf('<input type="hidden" name="ClassName" value="%s" />', $className);
         echo sprintf('<input type="hidden" name="ID" value="%s" />', $id);
-        echo '<label>Max allowed depth (optional):<br />';
-        echo sprintf('<input name="maxDepth" type="text" value="%s" /><br />', $maxDepth ?: '');
-        echo '<span class="note">';
-        echo 'This can be useful if you\'re hitting "Maximum function nesting level" errors. See the docs regarding';
-        echo ' "Excluding relationships from export" for more details on how you might avoid these errors';
-        echo '</span>';
         echo '</label>';
         echo '<br />';
         echo '<br />';
@@ -231,11 +235,8 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         $service = FixtureService::create();
 
-        if ($maxDepth) {
-            $service->setAllowedDepth($maxDepth);
-        }
-
         $service->addDataObject($dataObject);
+        $output = $service->outputFixture();
 
         echo '<div style="clear: both;"></div>';
 
@@ -251,7 +252,7 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '</div>';
 
         echo '<p><strong>Fixture output:</strong></p>';
-        echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $service->outputFixture());
+        echo sprintf('<textarea cols="90" rows="50">%s</textarea>', $output);
     }
 
     protected function outputStyles(): void

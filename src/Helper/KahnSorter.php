@@ -8,9 +8,13 @@ namespace ChrisPenny\DataObjectToFixture\Helper;
 class KahnSorter
 {
 
-    private array $nodes = [];
+    private array $sortedNodes = [];
 
     private array $messages = [];
+
+    private array $warnings = [];
+
+    private bool $processed = false;
 
     /**
      * Example input:
@@ -37,10 +41,17 @@ class KahnSorter
      *   'SilverStripe\Assets\Image' => [],
      * ]
      */
-    public function __construct(array $nodes)
+    public function process(array $relationshipMap): array
     {
-        foreach ($nodes as $key => $dependencies) {
-            $this->nodes[$key] = [
+        // Reset everything before we kick off
+        $this->sortedNodes = [];
+        $this->messages = [];
+        $this->warnings = [];
+        // Before we can process our relationship map, we need to transfer them into nodes that contain more useful info
+        $nodes = [];
+
+        foreach ($relationshipMap as $key => $dependencies) {
+            $nodes[$key] = [
                 'name' => $key,
                 'dependencies' => $dependencies ?? [],
                 'count' => 0,
@@ -49,11 +60,11 @@ class KahnSorter
             // We do this since we want to support unspecified dependencies
             foreach ($dependencies as $dependency) {
                 // A more informed version of it has been set
-                if (isset($this->nodes[$dependency])) {
+                if (isset($nodes[$dependency])) {
                     continue;
                 }
 
-                $this->nodes[$dependency] = [
+                $nodes[$dependency] = [
                     'name' => $dependency,
                     'dependencies' => [],
                     'count' => 0,
@@ -61,7 +72,7 @@ class KahnSorter
             }
         }
 
-        foreach ($this->nodes as $node) {
+        foreach ($nodes as $node) {
             $name = $node['name'];
             $edges = [];
 
@@ -71,62 +82,115 @@ class KahnSorter
                 }
             }
 
+            // Simple message, just as an FYI (it's not a warning)
             $this->messages[] = sprintf(
                 '[Dependency resolution] %s depends on [%s]',
                 $name,
                 implode(',', $edges)
             );
         }
-    }
 
-    public function sort(): array
-    {
+        // Now that all of our nodes have been put into the structure we require, we can start processing them
         $pending = [];
 
-        foreach ($this->nodes as $node) {
+        // Loop through each of our nodes
+        foreach ($nodes as $node) {
+            // Loop through each dependency that this node has specified it depends on
             foreach ($node['dependencies'] as $dependency) {
-                $this->nodes[$dependency]['count'] += 1;
+                // Update the count of that dependency (marking it something else depends on it)
+                $nodes[$dependency]['count'] += 1;
             }
         }
 
-        foreach ($this->nodes as $node) {
+        // Loop through each node again
+        foreach ($nodes as $node) {
+            // In order for the sorter to work, we have to have at least one dependency that had no other nodes
+            // depending on it
+            // Skip any nodes that were marked as being depended on by another
             if ($node['count'] > 0) {
                 continue;
             }
 
+            // Any nodes with no other nodes depending on it can be processed (in any order between them) first
             $pending[] = $node;
         }
 
-        $output = [];
+        $sortedNodes = [];
 
+        // We're going to continue adding nodes to our $pending stack
         while (count($pending) > 0) {
-            $currentNode = array_pop($pending);
-            $output[] = $currentNode['name'];
+            // Remove the first node from the $pending array
+            $currentNode = array_shift($pending);
+            // Add it to our $sortedNodes array
+            $sortedNodes[] = $currentNode['name'];
 
+            // We don't need to do anything else here if this node has no dependencies
             if (!is_array($currentNode['dependencies'])) {
                 continue;
             }
 
+            // Now that we have process this current node, we can go into each of its dependencies and mark that
+            // dependencies count as minus 1 from its previous total (as we know we just processed one of the items that
+            // dependended on it)
             foreach ($currentNode['dependencies'] as $dependency) {
-                $this->nodes[$dependency]['count'] -= 1;
+                // Reduce the active count of dependent nodes on this dependency by 1
+                $nodes[$dependency]['count'] -= 1;
 
-                if ($this->nodes[$dependency]['count'] > 0) {
+                // If there are still other nodes that depend on this node, then we can't yet add it to our $pending
+                // stack
+                if ($nodes[$dependency]['count'] > 0) {
                     continue;
                 }
 
-                $pending[] = $this->nodes[$dependency];
+                // This node is now ready to be processed as well
+                $pending[] = $nodes[$dependency];
             }
         }
 
-        foreach ($this->nodes as $node) {
+        // Finally, let's loop through our nodes one more time, to see if any nodes could not be processed. This would
+        // indicate that there is a dependency loop in there somewhere (and so, they can't be sorted)
+        foreach ($nodes as $node) {
+            // This node was processed fine
             if ($node['count'] === 0) {
                 continue;
             }
 
-            $this->messages[] = sprintf('Node `%s` has `%s` left over dependencies', $node['name'], $node['count']);
+            // This node was not processed
+            $this->warnings[] = sprintf(
+                'Node `%s` has `%s` left over dependencies, and so could not be sorted',
+                $node['name'],
+                $node['count']
+            );
+
+            // We'll still add this node (so that it can be represented in our fixture), but with the warning above, it
+            // might require some developer action
+            $sortedNodes[] = $node['name'];
         }
 
-        return array_reverse($output);
+        $this->sortedNodes = array_reverse($sortedNodes);
+        $this->processed = true;
+
+        return $this->sortedNodes;
+    }
+
+    public function hasProcessed(): bool
+    {
+        return $this->processed;
+    }
+
+    public function getSortedNodes(): array
+    {
+        return $this->sortedNodes;
+    }
+
+    public function getMessages(): array
+    {
+        return $this->messages;
+    }
+
+    public function getWarnings(): array
+    {
+        return $this->warnings;
     }
 
 }

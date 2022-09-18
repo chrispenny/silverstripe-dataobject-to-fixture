@@ -4,15 +4,17 @@ Generate a YAML fixture from DataObjects
 - [Installation](#installation)
 - [Purpose (early stage)](#purpose-(early-stage))
 - [Purpose (future development)](#purpose-(future-development))
-- [Warnings](#warnings)
-- [Dev task](#dev-task)
 - [General usage](#general-usage)
-- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
+  - [Warnings](#warnings)
+  - [Dev task](#dev-task)
 - [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
 - [Common issues](#common-issues)
+  - [Parent Pages included in your export](#parent-pages-included-in-your-export) 
+  - [Node `[YourClass]` has `[x]` left over dependencies, and so could not be sorted](#node-yourclass-has-x-left-over-dependencies-and-so-could-not-be-sorted) 
+  - [Request timeout when generating fixtures](#request-timeout-when-generating-fixtures) 
+  - [DataObject::get() cannot query non-subclass DataObject directly](#dataobjectget-cannot-query-non-subclass-dataobject-directly) 
 - [Supported relationships](#supported-relationships)
-- [Unsupported relationships](#unsupported-relationships)
 - [Fluent support](#fluent-support)
 - [Future features](#future-features)
 - [Things that this module does not currently do](#things-that-this-module-does-not-currently-do)
@@ -25,24 +27,33 @@ composer require chrispenny/silverstripe-data-object-to-fixture
 
 ## Purpose (early stage)
 
-The purpose of this module (at this early stage) is not to create perfect fixtures, but more to provide a solid
-guideline for what your fixture should look like.
+The purpose of this module (at this early stage) is not to guarantee perfect fixtures every time, but more to provide a
+solid guideline for what your fixture should look like.
 
 For example:
 Writing unit test fixtures can be difficult, especially when you're needing to visualise the structure and relationships
 of many different DataObjects (and then add an extra layer if you're using, say, Fluent).
 
+I would also like this module to work well with the
+[Populate](https://github.com/silverstripe/silverstripe-populate) module. Please note though that you'll need to be
+running version [2.1 or greater](https://github.com/silverstripe/silverstripe-populate/releases/tag/2.1.0), as versions
+before that did not support circular relationships.
+
 ## Purpose (future development)
 
-One goal for the future of this module is for it to work in tandem with the Populate module. I would like to get to a
-stage where content authors are able to (for example) "export pages" through the CMS, so that those pages can then be
-recreated via Populate (without a dev needing to create the fixture themselves).
+My dream for this module is that I would like to get to a stage where we can confidently say that generated fixtures
+will be perfect every time.
+
+From there, I could see this being used (as an example) for testers to be able to export pages through the CMS on their
+test environments, so that those pages can then be restored at any time via (maybe) Populate. How this would work
+exactly, and whether or not it would use Populate, is still to be determined.
 
 ## Warnings
 
-This is in very, very early development stages. Please be aware that:
+This is still in early development stages. Please be aware that:
 
 - Classes might change
+- Return types might change
 - Entire paradigms on how I generate the fixtures might change
 
 What won't change:
@@ -53,14 +64,16 @@ I would not recommend that you use this module (at this stage) for any applicati
 recommend that you use it as a developer tool (EG: to help you write your own fixtures, either for tests, or to be used
 with Populate).
 
-## Dev task
+## General usage
+
+### Dev task
 
 A dev task can be found at `/dev/tasks/generate-fixture-from-dataobject`.
 
 This task will allow you to generate a fixture (output on the screen for you to copy/paste) for any DataObject that
 you have defined in your project.
 
-## General usage
+### Code use
 
 ```php
 // Instantiate the Service.
@@ -73,6 +86,9 @@ $page = Page::get()->byID(1);
 // Add the DataObject to the Service.
 $service->addDataObject($dataObject);
 
+// Generating the fixture can also generate new warnings
+$output = $service->outputFixture();
+
 // Check for warnings? This is somewhat important, because if you have looping relationships (which we have no way of
 // creating fixtures for at the moment) this is how you'll know about it.
 if (count($service->getWarnings()) > 0) {
@@ -80,22 +96,11 @@ if (count($service->getWarnings()) > 0) {
 }
 
 // Do something with the fixture output.
-highlight_string($service->outputFixture());
+highlight_string($output);
 
 // Or maybe save the output to a file?
 $fixture = Director::baseFolder() . '/app/resources/fixture.yml';
 file_put_contents($fixture, $service->outputFixture());
-```
-
-## Set a maximum depth to export
-
-If you are having issues with "nesting level of '256' reached", then one option is to set a maximum depth that the
-Service will attempt to export.
-
-```php
-// Instantiate the Service.
-$service = new FixtureService();
-$service->setAllowedDepth(2);
 ```
 
 ## Excluding classes from export
@@ -157,34 +162,55 @@ App\Models\MyModel:
 
 ## Common issues
 
-### Relationship to ElementalArea missing
+### Parent Pages included in your export
 
-TL;DR: There is a looping relationship between `Page` and `ElementalArea` in later versions of Elemental. You can
-exclude the `has_one` on `ElementalArea` as follows.
+When you're exporting Pages, if that Page has a `Parent`, then that `Parent` is considered a valid relationship, and
+so it will get exported along with the Page you've selected.
 
+I'm still considering what to do about this, but for now, I would probably recommend that you add `Parent` to the list
+of excluded relationships for `SiteTree`:
+
+```yaml
+SilverStripe\CMS\Model\SiteTree:
+    excluded_fixture_relationships:
+        - Parent
 ```
-DNADesign\Elemental\Models\ElementalArea:
+
+### Node `[YourClass]` has `[x]` left over dependencies, and so could not be sorted
+
+This generally happens when you have a looping relationship. EG: `Page` `has_one` `Link`, and `Link` `has_one` back to
+`Page`. The sorter cannot determine which class should be prioritised above the other.
+
+This doesn't necessarily mean that things will break, but it's worth reviewing. You might find that you can exclude one
+of the relationships in order to make thing more consistent.
+
+A good example of this is in Elemental. Elemental provides an extension called `TopPage` which provides a relationship
+directly from each `BaseElement` to the `Page` that it belongs to (it's like a "index" so that you can loop up your
+`Page` from the `BaseElement` with less DB queries). This is handy for developers, but less handy for YAML fixtures.
+We'd actually prefer to exclude this relationship and follow the correct relationship flow from `Page` to
+`ElementalArea` to `BaseElement`.
+
+I could exclude this relationship by adding the following configuration:
+```yaml
+DNADesign\Elemental\Models\BaseElement:
   excluded_fixture_relationships:
     - TopPage
 ```
 
-Extra info: [Issue](https://github.com/chrispenny/silverstripe-data-object-to-fixture/issues/13).
+### Request timeout when generating fixtures
 
-### Nesting level of '256' reached
+Above are two options that you can use to attempt to reduce this.
 
-Above are three options that you can use to attempt to reduce this.
-
-- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
 - [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
 
 I would recommend that you begin by exluding classes that you don't need for your export, then move to excluding
-specific relationships that might be causing deep levels of nested relationships, and finally, if those fail, you can
-set a max depth.
+specific relationships that might be causing deep levels of nested relationships.
 
 ### DataObject::get() cannot query non-subclass DataObject directly
 
-You might see this error if you have a relationship being defined as simply `DataObject::class`, EG:
+You might see this error if you have polymorphic relationships (relationships being defined as simply
+`DataObject::class`), EG:
 
 ```php
 private static $has_one = [
@@ -216,21 +242,12 @@ method.
 
 - `has_one`
 - `has_many`
-- `many_many` where a `through` relationship has been defined.
-
-## Unsupported relationships
-
-- `many_many` where **no** `through` relationship has been defined (you should be using `through`.... Use `through`).
-- `has_one` relationships that result in a loop of relationships (`belongs_to` is the "backward" definition for a
-`has_one` relationship, unfortunately, this is not currently supported in fixtures, so, we have no way to create a
-fixture for relationships that loop).
+- `many_many` (with and without `through` definitions)
 
 ## Fluent support
 
-It is my intention to support Fluent and exporting Localised fields.
-
-Current state *does* support this, but, again, this is still very early development, so you should be validating
-everything before you just go right ahead and assume it's perfect.
+It is my intention to support Fluent and exporting Localised fields in the future, but at this time, there is no
+support provided.
 
 ## Future features
 
@@ -240,7 +257,5 @@ everything before you just go right ahead and assume it's perfect.
 ## Things that this module does not currently do
 
 - Export `_Live` tables. I hope to add `_Live` table exports soon(ish).
-- There is no ordering logic for records within the same class. This means that if you have classes that can have
-relationships to itself, the order or records might not be correct.
 - Support for exporting/saving away Asset binary files has not been added. This means that in the current state, you can
 only generate the database record for an Asset.
