@@ -4,15 +4,17 @@ Generate a YAML fixture from DataObjects
 - [Installation](#installation)
 - [Purpose (early stage)](#purpose-(early-stage))
 - [Purpose (future development)](#purpose-(future-development))
-- [Warnings](#warnings)
-- [Dev task](#dev-task)
 - [General usage](#general-usage)
-- [Set a maximum depth to export](#set-a-maximum-depth-to-export)
+  - [Warnings](#warnings)
+  - [Dev task](#dev-task)
 - [Excluding relationships from export](#excluding-relationships-from-export)
 - [Excluding classes from export](#excluding-classes-from-export)
 - [Common issues](#common-issues)
+  - [Parent Pages included in your export](#parent-pages-included-in-your-export) 
+  - [Node `[YourClass]` has `[x]` left over dependencies, and so could not be sorted](#node-yourclass-has-x-left-over-dependencies-and-so-could-not-be-sorted) 
+  - [Request timeout when generating fixtures](#request-timeout-when-generating-fixtures) 
+  - [DataObject::get() cannot query non-subclass DataObject directly](#dataobjectget-cannot-query-non-subclass-dataobject-directly) 
 - [Supported relationships](#supported-relationships)
-- [Unsupported relationships](#unsupported-relationships)
 - [Fluent support](#fluent-support)
 - [Future features](#future-features)
 - [Things that this module does not currently do](#things-that-this-module-does-not-currently-do)
@@ -255,7 +257,5 @@ support provided.
 ## Things that this module does not currently do
 
 - Export `_Live` tables. I hope to add `_Live` table exports soon(ish).
-- There is no ordering logic for records within the same class. This means that if you have classes that can have
-relationships to itself, the order or records might not be correct.
 - Support for exporting/saving away Asset binary files has not been added. This means that in the current state, you can
 only generate the database record for an Asset.
