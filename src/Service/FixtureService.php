@@ -8,6 +8,7 @@ use ChrisPenny\DataObjectToFixture\ORM\Group;
 use ChrisPenny\DataObjectToFixture\ORM\Record;
 use Exception;
 use SilverStripe\Core\Config\Config;
+use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
@@ -17,6 +18,7 @@ class FixtureService
 {
 
     use Injectable;
+    use Configurable;
 
     private ?FixtureManifest $fixtureManifest;
 
@@ -32,6 +34,8 @@ class FixtureService
      * @var DataObject[]
      */
     private array $dataObjectStack = [];
+    
+    private static array $fixture_files = [];
 
     public function __construct()
     {
