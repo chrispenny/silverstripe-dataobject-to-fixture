@@ -1,6 +1,7 @@
 ---
 Name: dataobjecttofixture_model
 ---
+# Default behaviour is to never export Member related information
 SilverStripe\Security\Member:
   exclude_from_fixture_relationships: 1
 
@@ -12,6 +13,11 @@ SilverStripe\Security\MemberPassword:
 
 SilverStripe\Security\RememberLoginHash:
   exclude_from_fixture_relationships: 1
+
+# Describe the polymorphic relationship present in SiteTreeLink (a model provided in cms)
+SilverStripe\CMS\Model\SiteTreeLink:
+  field_classname_map:
+    ParentID: ParentClass
 
 Symbiote\QueuedJobs\Controllers\QueuedTaskRunner:
   task_blacklist:
