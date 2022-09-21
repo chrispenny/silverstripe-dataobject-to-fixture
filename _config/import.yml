@@ -1,0 +1,10 @@
+---
+Name: dataobjecttofixture_import
+---
+SilverStripe\MimeValidator\MimeUploadValidator:
+  MimeTypes:
+    yml:
+      - 'application/x-yaml'
+      - 'text/plain'
+      - 'text/x-yaml'
+      - 'text/yaml'
