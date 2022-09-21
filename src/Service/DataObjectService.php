@@ -17,6 +17,14 @@ class DataObjectService
 
     private static array $fixture_files = [];
 
+    /**
+     * Creates DataObjects using Populate functionality from fixture files defined in site configuration yml files
+     * This method uses similar functionality to importFromStream().
+     * importFromStream() could be called within the foreach loop however this would be less efficient as the
+     * processFailedFixtures() function would be called after each fixture file rather than after processing all files
+     *
+     * @return void
+     */
     public function importFromFixture(): void
     {
         /** @var PopulateFactory $factory */
@@ -27,12 +35,18 @@ class DataObjectService
             $fixture = new YamlFixture($fixtureFile);
             $fixture->writeInto($factory);
 
-            $fixture = null;
+            unset($fixture);
         }
 
         $factory->processFailedFixtures();
     }
 
+    /**
+     * Takes the provided stream and processes the fixture->DataObject functionality using Populate methods
+     *
+     * @param string $stream File path of yml fixture file OR string containing yml content
+     * @return void
+     */
     public function importFromStream(string $stream): void
     {
         /** @var PopulateFactory $factory */
