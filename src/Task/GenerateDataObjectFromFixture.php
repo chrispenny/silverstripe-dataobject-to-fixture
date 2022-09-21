@@ -2,14 +2,11 @@
 
 namespace ChrisPenny\DataObjectToFixture\Task;
 
-use ChrisPenny\DataObjectToFixture\Service\FixtureService;
-use DNADesign\Populate\PopulateFactory;
+use ChrisPenny\DataObjectToFixture\Service\DataObjectService;
 use Exception;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\BuildTask;
-use SilverStripe\Dev\YamlFixture;
-use SilverStripe\ORM\DB;
 use Throwable;
 
 /**
@@ -26,17 +23,35 @@ class GenerateDataObjectFromFixture extends BuildTask
 
     private ?int $previousExecution = null;
 
+    private ?array $configuredFixtureFiles = null;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $service = Injector::inst()->create(DataObjectService::class);
+        $this->configuredFixtureFiles = $service::config()->get('fixture_files');
+    }
+
     /**
      * @param HTTPRequest|mixed $request
      * @throws Exception
      */
     public function run($request): void // phpcs:ignore
     {
+        $service = DataObjectService::create();
+
         try {
             $this->previousExecution = ini_get('max_execution_time');
             ini_set('max_execution_time', 60);
 
-            $this->importFromFixture();
+            if ($request->getVar('from-configuration')) {
+                $service->importFromFixture();
+            } elseif ($request->postVar('fixture-details')) {
+                $service->importFromStream($request->postVar('fixture-details'));
+            } else {
+                $this->outputInitialForm();
+            }
         } catch (Throwable $e) {
             throw $e;
         } finally {
@@ -44,21 +59,20 @@ class GenerateDataObjectFromFixture extends BuildTask
         }
     }
 
-    protected function importFromFixture(): void
+    protected function outputInitialForm(): void
     {
-        /** @var PopulateFactory $factory */
-        $factory = Injector::inst()->create(PopulateFactory::class);
-        $service = Injector::inst()->create(FixtureService::class);
-
-        foreach ($service::config()->get('fixture_files') as $fixtureFile) {
-            DB::alteration_message(sprintf('Processing %s', $fixtureFile), 'created');
-            $fixture = new YamlFixture($fixtureFile);
-            $fixture->writeInto($factory);
-
-            $fixture = null;
+        if ($this->configuredFixtureFiles) {
+            echo 'Fixture files have been defined in your site configuration click ' .
+            '<a href="?from-configuration=1">here</a> to generate DataObjects from the configured file(s)';
         }
 
-        $factory->processFailedFixtures();
+        echo '<form action="" method="post">';
+        echo '<p><strong>Fixture data to us to create DataObject(s):</strong></p>';
+        echo'<div><textarea cols="90" rows="50" name="fixture-details"></textarea></div>';
+
+        echo '<button type="submit">Submit</button>';
+
+        echo '</form>';
     }
 
 }
