@@ -304,7 +304,7 @@ class FixtureService
             $relationshipValue = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 
             // Add the relationship field to our current Record
-            $record->addFieldValue($relationFieldName, $relationshipValue);
+            $record->addFieldValue($relationshipName, $relationshipValue);
 
             // Add a relationship map for these Groups. That being, our origin DataObject class relies on the related
             // DataObject class (EG: Page has ElementalArea)

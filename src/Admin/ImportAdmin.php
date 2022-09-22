@@ -4,6 +4,7 @@ namespace ChrisPenny\DataObjectToFixture\Admin;
 
 use ChrisPenny\DataObjectToFixture\Admin\Form\ImportButton;
 use ChrisPenny\DataObjectToFixture\Admin\Model\ImportHistory;
+use ChrisPenny\DataObjectToFixture\Service\DataObjectService;
 use SilverStripe\Admin\ModelAdmin;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\FieldList;
@@ -15,9 +16,12 @@ use SilverStripe\Forms\GridField\GridFieldAddNewButton;
 use SilverStripe\Forms\GridField\GridFieldExportButton;
 use SilverStripe\Forms\GridField\GridFieldImportButton;
 use SilverStripe\Forms\GridField\GridFieldPrintButton;
+use SilverStripe\ORM\Connect\DatabaseException;
+use SilverStripe\ORM\DB;
 use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Security\PermissionProvider;
 use Symbiote\GridFieldExtensions\GridFieldAddExistingSearchButton;
+use Throwable;
 
 class ImportAdmin extends ModelAdmin implements PermissionProvider
 {
@@ -102,6 +106,31 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
 
             return false;
         }
+
+        /*
+         * Populate uses DB::alterationMessage() to display messages when the dev task is run.
+         * This function echos the message immediately so we need to suppress it here otherwise the messages will
+         * appear briefly when the page reloads
+         */
+        DB::quiet();
+
+        try {
+            $service = new DataObjectService();
+            $service->importFromStream($fileName);
+        } catch (Throwable $e) {
+            // database exceptions are especially ugly so it is best to simplify this for the CMS users experience
+            $message = $e instanceof DatabaseException
+                ? 'A Database error has occurred. This may be caused by referencing a non existant DataObject or Field.'
+                    . ' Some of the Objects defined in this file may still have been imported.'
+                : $e->getMessage();
+
+            $form->sessionMessage($message);
+            $this->redirectBack();
+
+            return false;
+        }
+
+        DB::quiet(false);
 
         $importHistory = ImportHistory::create();
         $importHistory->Filename = $_FILES['_YmlFile']['name'];
