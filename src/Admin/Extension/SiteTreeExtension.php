@@ -1,7 +1,8 @@
 <?php
 
-namespace ChrisPenny\DataObjectToFixture\Extension;
+namespace ChrisPenny\DataObjectToFixture\Admin\Extension;
 
+use ChrisPenny\DataObjectToFixture\Admin\ImportAdmin;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\ORM\DataExtension;
@@ -16,7 +17,7 @@ class SiteTreeExtension extends DataExtension
     public function updateCMSActions(FieldList $actions): void
     {
         // Check permissions
-        if (!$this->owner->canEdit() || !$this->owner->canPublish() || !Permission::check('CMS_ACCESS_CMSMain')) {
+        if (!$this->owner->canEdit() || !Permission::check(ImportAdmin::PERMISSION_EXPORT)) {
             return;
         }
 
@@ -28,11 +29,11 @@ class SiteTreeExtension extends DataExtension
 
         $actionOptions->insertAfter(
             'Information',
-            FormAction::create('exportfixture', _t('EXPORTFIXTURE', 'Export Fixture'))
-                    ->setUseButtonTag(false)
-                    ->addExtraClass('export-fixture-action')
-                    ->addExtraClass('btn')
-                    ->addExtraClass('btn-secondary'),
+            FormAction::create('exportfixture', _t('DataObjectToFixture.ExportFixture', 'Export Fixture'))
+                ->setUseButtonTag(false)
+                ->addExtraClass('export-fixture-action')
+                ->addExtraClass('btn')
+                ->addExtraClass('btn-secondary'),
         );
     }
 

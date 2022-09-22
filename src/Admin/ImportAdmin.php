@@ -19,6 +19,7 @@ use SilverStripe\Forms\GridField\GridFieldPrintButton;
 use SilverStripe\ORM\Connect\DatabaseException;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 use Symbiote\GridFieldExtensions\GridFieldAddExistingSearchButton;
 use Throwable;
@@ -26,13 +27,15 @@ use Throwable;
 class ImportAdmin extends ModelAdmin implements PermissionProvider
 {
 
-    private const PERMISSION_ACCESS = 'DataObjectToFixture_ImportAdmin';
+    public const PERMISSION_IMPORT_ADMIN = 'DataObjectToFixture_Import_Admin';
+    public const PERMISSION_IMPORT = 'DataObjectToFixture_Import';
+    public const PERMISSION_EXPORT = 'DataObjectToFixture_Export';
 
     private static string $url_segment = 'fixture-import';
 
     private static string $menu_title = 'Fixture Import';
 
-    private static string $required_permission_codes = self::PERMISSION_ACCESS;
+    private static string $required_permission_codes = self::PERMISSION_IMPORT_ADMIN;
 
     private static string $managed_models = ImportHistory::class;
 
@@ -51,23 +54,29 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
         /** @var GridField $gridField */
         $gridField = $form->Fields()->fieldByName('ChrisPenny-DataObjectToFixture-Admin-Model-ImportHistory');
 
-        if ($gridField) {
-            $config = $gridField->getConfig();
-
-            // Remove default Components
-            $config->removeComponentsByType(GridFieldImportButton::class);
-            $config->removeComponentsByType(GridFieldAddNewButton::class);
-            $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
-            $config->removeComponentsByType(GridFieldPrintButton::class);
-            $config->removeComponentsByType(GridFieldExportButton::class);
-
-            // Add our own ImportButton (that contains the correct naming)
-            $config->addComponent(
-                ImportButton::create('buttons-before-left')
-                    ->setImportForm($this->ImportForm())
-                    ->setModalTitle('Import from Yaml')
-            );
+        if (!$gridField) {
+            return $form;
         }
+
+        $config = $gridField->getConfig();
+
+        // Remove default Components
+        $config->removeComponentsByType(GridFieldImportButton::class);
+        $config->removeComponentsByType(GridFieldAddNewButton::class);
+        $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
+        $config->removeComponentsByType(GridFieldPrintButton::class);
+        $config->removeComponentsByType(GridFieldExportButton::class);
+
+        if (!Permission::check(ImportAdmin::PERMISSION_IMPORT)) {
+            return $form;
+        }
+
+        // Add our own ImportButton (that contains the correct naming)
+        $config->addComponent(
+            ImportButton::create('buttons-before-left')
+                ->setImportForm($this->ImportForm())
+                ->setModalTitle('Import from Yaml')
+        );
 
         return $form;
     }
@@ -140,6 +149,24 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
         $this->redirectBack();
 
         return true;
+    }
+
+    public function providePermissions()
+    {
+        return [
+            self::PERMISSION_EXPORT => [
+                'name' => _t('DataObjectToFixture.PERMISSION_EXPORT', 'Export'),
+                'category' => _t('DataObjectToFixture.PERMISSION_CATEGORY', 'DataObject to Fixture'),
+                'help' => _t('DataObjectToFixture.PERMISSION_HELP', 'Allow users to export pages to yaml files'),
+                'sort' => 0
+            ],
+            self::PERMISSION_IMPORT => [
+                'name' => _t('DataObjectToFixture.PERMISSION_IMPORT', 'Import'),
+                'category' => _t('DataObjectToFixture.PERMISSION_CATEGORY', 'DataObject to Fixture'),
+                'help' => _t('DataObjectToFixture.PERMISSION_HELP', 'Allow users to import pages from yaml files'),
+                'sort' => 1
+            ],
+        ];
     }
 
 }

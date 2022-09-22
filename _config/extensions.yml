@@ -1,8 +1,0 @@
-SilverStripe\CMS\Model\SiteTree:
-  extensions:
-    - ChrisPenny\DataObjectToFixture\Extension\SiteTreeExtension
-
-SilverStripe\Admin\LeftAndMain:
-  extensions:
-    - ChrisPenny\DataObjectToFixture\Extension\ExportFixtureExtension
-    
