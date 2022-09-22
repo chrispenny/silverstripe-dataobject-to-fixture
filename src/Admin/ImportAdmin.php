@@ -151,20 +151,20 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
         return true;
     }
 
-    public function providePermissions()
+    public function providePermissions() // phpcs:ignore SlevomatCodingStandard.TypeHints
     {
         return [
             self::PERMISSION_EXPORT => [
                 'name' => _t('DataObjectToFixture.PERMISSION_EXPORT', 'Export'),
                 'category' => _t('DataObjectToFixture.PERMISSION_CATEGORY', 'DataObject to Fixture'),
                 'help' => _t('DataObjectToFixture.PERMISSION_HELP', 'Allow users to export pages to yaml files'),
-                'sort' => 0
+                'sort' => 0,
             ],
             self::PERMISSION_IMPORT => [
                 'name' => _t('DataObjectToFixture.PERMISSION_IMPORT', 'Import'),
                 'category' => _t('DataObjectToFixture.PERMISSION_CATEGORY', 'DataObject to Fixture'),
                 'help' => _t('DataObjectToFixture.PERMISSION_HELP', 'Allow users to import pages from yaml files'),
-                'sort' => 1
+                'sort' => 1,
             ],
         ];
     }
