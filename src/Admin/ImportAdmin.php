@@ -2,10 +2,12 @@
 
 namespace ChrisPenny\DataObjectToFixture\Admin;
 
+use ChrisPenny\DataObjectToFixture\Admin\Form\ExportButton;
 use ChrisPenny\DataObjectToFixture\Admin\Form\ImportButton;
 use ChrisPenny\DataObjectToFixture\Admin\Model\ImportHistory;
 use ChrisPenny\DataObjectToFixture\Service\DataObjectService;
 use SilverStripe\Admin\ModelAdmin;
+use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FileField;
@@ -17,6 +19,7 @@ use SilverStripe\Forms\GridField\GridFieldExportButton;
 use SilverStripe\Forms\GridField\GridFieldImportButton;
 use SilverStripe\Forms\GridField\GridFieldPrintButton;
 use SilverStripe\ORM\Connect\DatabaseException;
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Security\Permission;
@@ -37,7 +40,16 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
 
     private static string $required_permission_codes = self::PERMISSION_IMPORT_ADMIN;
 
-    private static string $managed_models = ImportHistory::class;
+    private static array $managed_models = [
+        'import-history' => [
+            'dataClass' => ImportHistory::class,
+            'title' => 'Import History',
+        ],
+        'bulk-export' => [
+            'dataClass' => SiteTree::class,
+            'title' => 'Bulk Export',
+        ],
+    ];
 
     private static array $allowed_actions = [
         'ImportForm',
@@ -51,34 +63,62 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
     {
         $form = parent::getEditForm($id, $fields);
 
-        /** @var GridField $gridField */
-        $gridField = $form->Fields()->fieldByName('ChrisPenny-DataObjectToFixture-Admin-Model-ImportHistory');
+        /** @var GridField $importHistoryGridField */
+        $importHistoryGridField = $form->Fields()->fieldByName('import-history');
 
-        if (!$gridField) {
-            return $form;
+        if ($importHistoryGridField) {
+            $config = $importHistoryGridField->getConfig();
+
+            // Remove default Components
+            $config->removeComponentsByType(GridFieldImportButton::class);
+            $config->removeComponentsByType(GridFieldAddNewButton::class);
+            $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
+            $config->removeComponentsByType(GridFieldPrintButton::class);
+            $config->removeComponentsByType(GridFieldExportButton::class);
+
+            if (!Permission::check(ImportAdmin::PERMISSION_IMPORT)) {
+                return $form;
+            }
+
+            // Add our own ImportButton (that contains the correct naming)
+            $config->addComponent(
+                ImportButton::create('buttons-before-left')
+                    ->setImportForm($this->ImportForm())
+                    ->setModalTitle('Import from Yaml')
+            );
         }
 
-        $config = $gridField->getConfig();
+        /** @var GridField $bulkExportGridField */
+        $bulkExportGridField = $form->Fields()->fieldByName('bulk-export');
 
-        // Remove default Components
-        $config->removeComponentsByType(GridFieldImportButton::class);
-        $config->removeComponentsByType(GridFieldAddNewButton::class);
-        $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
-        $config->removeComponentsByType(GridFieldPrintButton::class);
-        $config->removeComponentsByType(GridFieldExportButton::class);
+        if ($bulkExportGridField) {
+            $config = $bulkExportGridField->getConfig();
 
-        if (!Permission::check(ImportAdmin::PERMISSION_IMPORT)) {
-            return $form;
+            // Remove default Components
+            $config->removeComponentsByType(GridFieldImportButton::class);
+            $config->removeComponentsByType(GridFieldAddNewButton::class);
+            $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
+            $config->removeComponentsByType(GridFieldPrintButton::class);
+            $config->removeComponentsByType(GridFieldExportButton::class);
+
+            // Add our own ImportButton (that contains the correct naming)
+            $config->addComponent(
+                new ExportButton('buttons-before-left')
+            );
         }
-
-        // Add our own ImportButton (that contains the correct naming)
-        $config->addComponent(
-            ImportButton::create('buttons-before-left')
-                ->setImportForm($this->ImportForm())
-                ->setModalTitle('Import from Yaml')
-        );
 
         return $form;
+    }
+
+    public function getList(): DataList
+    {
+        $list = parent::getList();
+
+        if ($this->modelTab === 'bulk-export') {
+            return $list->filter(['BulkFixtureExport' => 1]);
+        }
+
+        return $list;
     }
 
     public function ImportForm() // phpcs:ignore SlevomatCodingStandard.TypeHints

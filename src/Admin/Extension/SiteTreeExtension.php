@@ -3,6 +3,7 @@
 namespace ChrisPenny\DataObjectToFixture\Admin\Extension;
 
 use ChrisPenny\DataObjectToFixture\Admin\ImportAdmin;
+use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\ORM\DataExtension;
@@ -13,6 +14,14 @@ use SilverStripe\Security\Permission;
  */
 class SiteTreeExtension extends DataExtension
 {
+
+    private static $db = [
+        'BulkFixtureExport' => 'Boolean',
+    ];
+
+    private static $defaults = [
+        'BulkFixtureExport' => 0,
+    ];
 
     public function updateCMSActions(FieldList $actions): void
     {
@@ -34,6 +43,15 @@ class SiteTreeExtension extends DataExtension
                 ->addExtraClass('export-fixture-action')
                 ->addExtraClass('btn')
                 ->addExtraClass('btn-secondary'),
+        );
+    }
+
+    public function updateSettingsFields(FieldList $fields): void
+    {
+        $fields->addFieldToTab(
+            'Root.Settings',
+            new CheckboxField('BulkFixtureExport', 'Include in bulk fixture export?'),
+            'Visibility'
         );
     }
 
