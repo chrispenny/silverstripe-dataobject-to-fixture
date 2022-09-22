@@ -112,16 +112,17 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
          * This function echos the message immediately so we need to suppress it here otherwise the messages will
          * appear briefly when the page reloads
          */
-        DB::quiet(true);
+        DB::quiet();
 
         try {
             $service = new DataObjectService();
             $service->importFromStream($fileName);
         } catch (Throwable $e) {
             // database exceptions are especially ugly so it is best to simplify this for the CMS users experience
-            $message = $e instanceof DatabaseException ? 'A Database error has occurred. ' .
-                'This may be caused by referencing a non existant DataObject or Field. ' .
-                'Some of the Objects defined in this file may still have been imported.' : $e->getMessage();
+            $message = $e instanceof DatabaseException
+                ? 'A Database error has occurred. This may be caused by referencing a non existant DataObject or Field.'
+                    . ' Some of the Objects defined in this file may still have been imported.'
+                : $e->getMessage();
 
             $form->sessionMessage($message);
             $this->redirectBack();
