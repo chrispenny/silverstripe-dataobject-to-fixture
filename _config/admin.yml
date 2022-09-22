@@ -1,0 +1,18 @@
+---
+Name: dataobjecttofixture_admin
+---
+SilverStripe\CMS\Model\SiteTree:
+  extensions:
+    - ChrisPenny\DataObjectToFixture\Admin\Extension\SiteTreeExtension
+
+SilverStripe\Admin\LeftAndMain:
+  extensions:
+    - ChrisPenny\DataObjectToFixture\Admin\Extension\ExportFixtureExtension
+
+SilverStripe\MimeValidator\MimeUploadValidator:
+  MimeTypes:
+    yml:
+      - 'application/x-yaml'
+      - 'text/plain'
+      - 'text/x-yaml'
+      - 'text/yaml'

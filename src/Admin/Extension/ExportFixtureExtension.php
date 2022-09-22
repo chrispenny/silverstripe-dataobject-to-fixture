@@ -1,7 +1,8 @@
 <?php
 
-namespace ChrisPenny\DataObjectToFixture\Extension;
+namespace ChrisPenny\DataObjectToFixture\Admin\Extension;
 
+use ChrisPenny\DataObjectToFixture\Admin\ImportAdmin;
 use ChrisPenny\DataObjectToFixture\Service\FixtureService;
 use SilverStripe\Admin\LeftAndMainExtension;
 use SilverStripe\Control\HTTPRequest;
@@ -13,14 +14,13 @@ class ExportFixtureExtension extends LeftAndMainExtension
 {
 
     /**
-     * RequestHandler allowed actions
-     * for users with CMS_ACCESS_CMSMain permissions
+     * RequestHandler allowed actions for users with permission to export
      */
     private static array $allowed_actions = [
-        'exportfixture' => 'CMS_ACCESS_CMSMain',
+        'exportFixture' => ImportAdmin::PERMISSION_EXPORT,
     ];
 
-    public function exportfixture(): ?HTTPResponse
+    public function exportFixture(): ?HTTPResponse
     {
         // Get DataObject ClassName and ID
         $className = $this->owner->getRequest()->requestVar('ClassName') ?? null;
@@ -38,7 +38,7 @@ class ExportFixtureExtension extends LeftAndMainExtension
         // Configurate file name with current date
         $now = date('d-m-Y-H-i');
         $fileName = $className.'-'.$id.'-snapshot-'.$now.'.yml';
-        
+
         // Download object
         if ($output) {
             return HTTPRequest::send_file($output, $fileName, 'application/x-yaml');

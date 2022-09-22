@@ -14,6 +14,10 @@ SilverStripe\Security\MemberPassword:
 SilverStripe\Security\RememberLoginHash:
   exclude_from_fixture_relationships: 1
 
+# Exclude our history records
+ChrisPenny\DataObjectToFixture\Admin\Model\ImportHistory:
+  exclude_from_fixture_relationships: 1
+
 # Describe the polymorphic relationship present in SiteTreeLink (a model provided in cms)
 SilverStripe\CMS\Model\SiteTreeLink:
   field_classname_map:
