@@ -63,49 +63,8 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
     {
         $form = parent::getEditForm($id, $fields);
 
-        /** @var GridField $importHistoryGridField */
-        $importHistoryGridField = $form->Fields()->fieldByName('import-history');
-
-        if ($importHistoryGridField) {
-            $config = $importHistoryGridField->getConfig();
-
-            // Remove default Components
-            $config->removeComponentsByType(GridFieldImportButton::class);
-            $config->removeComponentsByType(GridFieldAddNewButton::class);
-            $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
-            $config->removeComponentsByType(GridFieldPrintButton::class);
-            $config->removeComponentsByType(GridFieldExportButton::class);
-
-            if (!Permission::check(ImportAdmin::PERMISSION_IMPORT)) {
-                return $form;
-            }
-
-            // Add our own ImportButton (that contains the correct naming)
-            $config->addComponent(
-                ImportButton::create('buttons-before-left')
-                    ->setImportForm($this->ImportForm())
-                    ->setModalTitle('Import from Yaml')
-            );
-        }
-
-        /** @var GridField $bulkExportGridField */
-        $bulkExportGridField = $form->Fields()->fieldByName('bulk-export');
-
-        if ($bulkExportGridField) {
-            $config = $bulkExportGridField->getConfig();
-
-            // Remove default Components
-            $config->removeComponentsByType(GridFieldImportButton::class);
-            $config->removeComponentsByType(GridFieldAddNewButton::class);
-            $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
-            $config->removeComponentsByType(GridFieldPrintButton::class);
-            $config->removeComponentsByType(GridFieldExportButton::class);
-
-            // Add our own ImportButton (that contains the correct naming)
-            $config->addComponent(
-                new ExportButton('buttons-before-left')
-            );
-        }
+        $this->updateImportInterface($form);
+        $this->updateExportInterface($form);
 
         return $form;
     }
@@ -207,6 +166,64 @@ class ImportAdmin extends ModelAdmin implements PermissionProvider
                 'sort' => 1,
             ],
         ];
+    }
+
+    protected function updateImportInterface(Form $form): void
+    {
+        /** @var GridField $importHistoryGridField */
+        $importHistoryGridField = $form->Fields()->fieldByName('import-history');
+
+        if (!$importHistoryGridField) {
+            return;
+        }
+
+        $config = $importHistoryGridField->getConfig();
+
+        // Remove default Components
+        $config->removeComponentsByType(GridFieldImportButton::class);
+        $config->removeComponentsByType(GridFieldAddNewButton::class);
+        $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
+        $config->removeComponentsByType(GridFieldPrintButton::class);
+        $config->removeComponentsByType(GridFieldExportButton::class);
+
+        if (!Permission::check(ImportAdmin::PERMISSION_IMPORT)) {
+            return;
+        }
+
+        // Add our own ImportButton (that contains the correct naming)
+        $config->addComponent(
+            ImportButton::create('buttons-before-left')
+                ->setImportForm($this->ImportForm())
+                ->setModalTitle('Import from Yaml')
+        );
+    }
+
+    protected function updateExportInterface(Form $form): void
+    {
+        /** @var GridField $bulkExportGridField */
+        $bulkExportGridField = $form->Fields()->fieldByName('bulk-export');
+
+        if (!$bulkExportGridField) {
+            return;
+        }
+
+        $config = $bulkExportGridField->getConfig();
+
+        // Remove default Components
+        $config->removeComponentsByType(GridFieldImportButton::class);
+        $config->removeComponentsByType(GridFieldAddNewButton::class);
+        $config->removeComponentsByType(GridFieldAddExistingSearchButton::class);
+        $config->removeComponentsByType(GridFieldPrintButton::class);
+        $config->removeComponentsByType(GridFieldExportButton::class);
+
+        if (!Permission::check(ImportAdmin::PERMISSION_EXPORT)) {
+            return;
+        }
+
+        // Add our own ImportButton (that contains the correct naming)
+        $config->addComponent(
+            new ExportButton('buttons-before-left')
+        );
     }
 
 }

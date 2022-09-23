@@ -11,15 +11,17 @@ use SilverStripe\Security\Permission;
 
 /**
  * Handles adding the "Export Fixture" button to a page's secondary actions menu
+ *
+ * @property int $BulkFixtureExport
  */
 class SiteTreeExtension extends DataExtension
 {
 
-    private static $db = [
-        'BulkFixtureExport' => 'Boolean',
+    private static array $db = [
+        'BulkFixtureExport' => 'Boolean(0)',
     ];
 
-    private static $defaults = [
+    private static array $defaults = [
         'BulkFixtureExport' => 0,
     ];
 
@@ -50,7 +52,7 @@ class SiteTreeExtension extends DataExtension
     {
         $fields->addFieldToTab(
             'Root.Settings',
-            new CheckboxField('BulkFixtureExport', 'Include in bulk fixture export?'),
+            CheckboxField::create('BulkFixtureExport', 'Include in bulk fixture export?'),
             'Visibility'
         );
     }
