@@ -12,7 +12,7 @@ use SilverStripe\Forms\GridField\GridFieldExportButton;
 class ExportButton extends GridFieldExportButton
 {
 
-    public function getHTMLFragments($gridField)
+    public function getHTMLFragments($gridField) // phpcs:ignore SlevomatCodingStandard.TypeHints
     {
         $button = new GridField_FormAction(
             $gridField,
@@ -29,7 +29,7 @@ class ExportButton extends GridFieldExportButton
         ];
     }
 
-    public function handleAction(GridField $gridField, $actionName, $arguments, $data)
+    public function handleAction(GridField $gridField, $actionName, $arguments, $data) // phpcs:ignore
     {
         if ($actionName === 'export') {
             // Get DataObject
