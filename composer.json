@@ -13,7 +13,7 @@
     }
   ],
   "support": {
-    "issues": "https://github.com/chrispenny/silverstripe-data-object-to-fixture/issues"
+    "issues": "https://github.com/chrispenny/silverstripe-dataobject-to-fixture/issues"
   },
   "require": {
     "php": "^7.4 || ^8.0",

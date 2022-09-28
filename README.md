@@ -1,4 +1,4 @@
-# silverstripe-data-object-to-fixture
+# Silverstripe DataObject To Fixture
 
 Generate a YAML fixture from DataObjects
 - [Installation](#installation)
