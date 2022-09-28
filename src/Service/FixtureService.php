@@ -230,9 +230,9 @@ class FixtureService
             return;
         }
 
-        foreach ($hasOneRelationships as $relationshipName => $relationClassName) {
+        foreach ($hasOneRelationships as $relationName => $relationClassName) {
             // Relationship field names (as represented in the Database) are always appended with `ID`
-            $relationFieldName = sprintf('%sID', $relationshipName);
+            $relationFieldName = sprintf('%sID', $relationName);
             // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
             // README for details)
             $fieldClassNameMap = $dataObject->config()->get('field_classname_map');
@@ -253,7 +253,7 @@ class FixtureService
             // Check to see if this particular relationship wants to be excluded
             $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
                 $dataObject->ClassName,
-                $relationshipName
+                $relationName
             );
 
             // Yup, exclude this relationship
@@ -304,7 +304,7 @@ class FixtureService
             $relationshipValue = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 
             // Add the relationship field to our current Record
-            $record->addFieldValue($relationFieldName, $relationshipValue);
+            $record->addFieldValue($relationName, $relationshipValue);
 
             // Add a relationship map for these Groups. That being, our origin DataObject class relies on the related
             // DataObject class (EG: Page has ElementalArea)
