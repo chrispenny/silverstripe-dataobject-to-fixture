@@ -16,13 +16,12 @@
     "issues": "https://github.com/chrispenny/silverstripe-dataobject-to-fixture/issues"
   },
   "require": {
-    "php": "^7.4 || ^8.0",
-    "silverstripe/vendor-plugin": "^1.0",
-    "silverstripe/framework": "^4.8",
-    "silverstripe/cms": "^4.8"
+    "php": "^8.1",
+    "silverstripe/framework": "^5",
+    "silverstripe/cms": "^5"
   },
   "require-dev": {
-    "phpunit/phpunit": "^9.5",
+    "silverstripe/recipe-testing": "^3",
     "slevomat/coding-standard": "^8"
   },
   "autoload": {

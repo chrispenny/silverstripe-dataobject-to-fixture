@@ -9,16 +9,13 @@ class Group
 
     use Injectable;
 
-    private ?string $className;
-
     /**
      * @var array|Record[]
      */
     private array $records = [];
 
-    public function __construct(string $className)
+    public function __construct(private readonly string $className)
     {
-        $this->className = $className;
     }
 
     public function getClassName(): string
@@ -34,10 +31,7 @@ class Group
         return $this->records;
     }
 
-    /**
-     * @param mixed $id
-     */
-    public function getRecordById($id): ?Record
+    public function getRecordById(string|int $id): ?Record
     {
         if (!array_key_exists($id, $this->records)) {
             return null;

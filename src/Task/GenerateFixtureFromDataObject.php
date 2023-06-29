@@ -22,7 +22,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
     protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
 
-    private static $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
+    private static string $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
 
     private ?int $previousExecution = null;
 
