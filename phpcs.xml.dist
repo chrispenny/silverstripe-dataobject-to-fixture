@@ -142,6 +142,9 @@
         <!-- Complexity check often fails at getCMSFields(). -->
         <!-- Each team/project can decide if they'd prefer to just tweak the complexity level rather than exclude this rule -->
         <exclude name="SlevomatCodingStandard.Complexity.Cognitive.ComplexityTooHigh"/>
+        <!-- Don't require alphabetical array keys -->
+        <exclude name="SlevomatCodingStandard.Arrays.AlphabeticallySortedByKeys.IncorrectKeyOrder"/>
+        <exclude name="SlevomatCodingStandard.Classes.RequireSelfReference.RequiredSelfReference"/>
     </rule>
 
     <rule ref="SlevomatCodingStandard.Namespaces.UnusedUses">

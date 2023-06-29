@@ -31,10 +31,7 @@ class FixtureManifest
         return $this->groups[$className];
     }
 
-    /**
-     * @param string|int $id
-     */
-    public function getRecordByClassNameId(string $className, $id): ?Record
+    public function getRecordByClassNameId(string $className, string|int $id): ?Record
     {
         $group = $this->getGroupByClassName($className);
 

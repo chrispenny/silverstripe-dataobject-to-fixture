@@ -545,10 +545,9 @@ class FixtureService
     }
 
     /**
-     * @param string|int $id
      * @throws Exception
      */
-    private function findOrCreateRecordByClassNameId(string $className, $id): Record
+    private function findOrCreateRecordByClassNameId(string $className, string|int $id): Record
     {
         $group = $this->findOrCreateGroupByClassName($className);
 

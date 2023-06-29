@@ -9,25 +9,13 @@ class Record
 
     use Injectable;
 
-    /**
-     * @var int|string|null
-     */
-    private $id;
-
     private array $fields = [];
 
-    /**
-     * @param mixed $id
-     */
-    public function __construct($id)
+    public function __construct(private readonly string|int $id)
     {
-        $this->id = $id;
     }
 
-    /**
-     * @return int|string|null
-     */
-    public function getId()
+    public function getId(): string|int
     {
         return $this->id;
     }
@@ -37,10 +25,7 @@ class Record
         return $this->fields;
     }
 
-    /**
-     * @param mixed $value
-     */
-    public function addFieldValue(string $fieldName, $value): Record
+    public function addFieldValue(string $fieldName, mixed $value): Record
     {
         $this->fields[$fieldName] = $value;
 
