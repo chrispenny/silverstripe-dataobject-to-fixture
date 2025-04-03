@@ -74,7 +74,7 @@ class FixtureService
      */
     public function outputFixture(): string
     {
-        return Yaml::dump($this->toArray(), 4);
+        return Yaml::dump($this->toArray(), 4, 2);
     }
 
     private function toArray(): array
