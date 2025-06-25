@@ -231,20 +231,9 @@ class FixtureService
         }
 
         foreach ($hasOneRelationships as $relationName => $relationClassName) {
-            // Handle polymorphic relationships where relationClassName might be an array
-            if (is_array($relationClassName)) {
-                // For polymorphic relationships, get the base class
-                if (isset($relationClassName['class'])) {
-                    $relationClassName = $relationClassName['class'];
-                } else {
-                    $this->addWarning(sprintf(
-                        'Polymorphic relationship "%s" in class "%s" has invalid configuration: %s',
-                        $relationName,
-                        $dataObject->ClassName,
-                        var_export($relationClassName, true)
-                    ));
-                    continue;
-                }
+            $relationClassName = $this->handlePolymorphicRelationship($relationName, $relationClassName, $dataObject);
+            if ($relationClassName === null) {
+                continue;
             }
             
             // Relationship field names (as represented in the Database) are always appended with `ID`
@@ -340,6 +329,48 @@ class FixtureService
             // Add the related DataObject to the stack to be processed
             $this->dataObjectStack[] = $relatedObject;
         }
+    }
+
+    /**
+     * Handle polymorphic relationship configurations where the relationship class is defined as an array
+     *
+     * @param string $relationName The name of the relationship
+     * @param string|array $relationClassName The class name or polymorphic configuration array
+     * @param DataObject $dataObject The data object being processed
+     * @return string|null The resolved class name, or null if the relationship should be skipped
+     */
+    private function handlePolymorphicRelationship(string $relationName, string|array $relationClassName, DataObject $dataObject): ?string
+    {
+        // If it's already a string, no processing needed
+        if (is_string($relationClassName)) {
+            return $relationClassName;
+        }
+
+        // Handle polymorphic relationships where relationClassName is an array
+        if (is_array($relationClassName)) {
+            // For polymorphic relationships, get the base class
+            if (isset($relationClassName['class'])) {
+                return $relationClassName['class'];
+            } else {
+                $this->addWarning(sprintf(
+                    'Polymorphic relationship "%s" in class "%s" has invalid configuration: %s',
+                    $relationName,
+                    $dataObject->ClassName,
+                    json_encode($relationClassName, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES, 2)
+                ));
+                return null;
+            }
+        }
+
+        // If it's neither string nor array, something's wrong
+        $this->addWarning(sprintf(
+            'Relationship "%s" in class "%s" has unexpected type "%s": %s',
+            $relationName,
+            $dataObject->ClassName,
+            gettype($relationClassName),
+            json_encode($relationClassName, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES, 2)
+        ));
+        return null;
     }
 
     /**
