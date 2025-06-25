@@ -231,6 +231,22 @@ class FixtureService
         }
 
         foreach ($hasOneRelationships as $relationName => $relationClassName) {
+            // Handle polymorphic relationships where relationClassName might be an array
+            if (is_array($relationClassName)) {
+                // For polymorphic relationships, get the base class
+                if (isset($relationClassName['class'])) {
+                    $relationClassName = $relationClassName['class'];
+                } else {
+                    $this->addWarning(sprintf(
+                        'Polymorphic relationship "%s" in class "%s" has invalid configuration: %s',
+                        $relationName,
+                        $dataObject->ClassName,
+                        var_export($relationClassName, true)
+                    ));
+                    continue;
+                }
+            }
+            
             // Relationship field names (as represented in the Database) are always appended with `ID`
             $relationFieldName = sprintf('%sID', $relationName);
             // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
@@ -240,6 +256,17 @@ class FixtureService
             // Apply the map that has been specified
             if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
                 $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
+                
+                // Ensure we have a valid class name string
+                if (!is_string($relationClassName) || empty($relationClassName)) {
+                    $this->addWarning(sprintf(
+                        'field_classname_map for field "%s" in class "%s" returned invalid class name: %s',
+                        $relationFieldName,
+                        $dataObject->ClassName,
+                        is_array($relationClassName) ? 'array' : gettype($relationClassName)
+                    ));
+                    continue;
+                }
             }
 
             // Check to see if class has requested that it not be included in relationship maps
