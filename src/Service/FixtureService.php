@@ -419,6 +419,28 @@ class FixtureService
                 continue;
             }
 
+            // Relationships are sometimes defined as ClassName.FieldName. Drop the .FieldName
+            $cleanRelationshipClassName = strtok($relationClassName, '.');
+
+            // Check to see if this class has requested that it not be included in relationship maps
+            $excludeClass = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
+
+            // Yup, exclude this class
+            if ($excludeClass) {
+                continue;
+            }
+
+            // Check to see if this particular relationship wants to be excluded
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $relationFieldName
+            );
+
+            // Yup, exclude this relationship
+            if ($excludeRelationship) {
+                continue;
+            }
+
             // TL;DR: many_many is really tough. Developers could choose to define it only in one direction, or in
             // both directions, and they could choose to define it either with, or without dot notation in either
             // direction
@@ -497,6 +519,17 @@ class FixtureService
                 continue;
             }
 
+            // Check to see if this particular relationship wants to be excluded
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $relationFieldName
+            );
+
+            // Yup, exclude this relationship
+            if ($excludeRelationship) {
+                continue;
+            }
+
             // This should always simply be defined as the class name (no dot notation)
             $throughClass = $relationshipValue['through'];
             $represented = false;
@@ -537,6 +570,14 @@ class FixtureService
             $relatedObjects = $dataObject->relField($relationFieldName);
 
             foreach ($relatedObjects as $relatedObject) {
+                // Check to see if this class has requested that it not be included in relationship maps
+                $excludeClass = Config::inst()->get($relatedObject->ClassName, 'exclude_from_fixture_relationships');
+
+                // Yup, exclude this class
+                if ($excludeClass) {
+                    continue;
+                }
+
                 // Add the related DataObject as one of our resolved relationships
                 $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 
