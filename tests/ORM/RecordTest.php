@@ -135,6 +135,15 @@ class RecordTest extends SapphireTest
         $this->assertArrayHasKey('Title', $fields);
     }
 
+    public function testAddFieldValueWithArray(): void
+    {
+        $record = Record::create(1);
+        $tags = ['=>App\Model\Tag.1', '=>App\Model\Tag.2'];
+        $record->addFieldValue('Tags', $tags);
+
+        $this->assertSame($tags, $record->getFields()['Tags']);
+    }
+
     public function testRemoveRelationshipValueForClassReturnsSelf(): void
     {
         $record = Record::create(1);

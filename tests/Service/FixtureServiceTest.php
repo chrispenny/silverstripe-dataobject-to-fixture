@@ -22,6 +22,7 @@ use Symfony\Component\Yaml\Yaml;
  */
 class FixtureServiceTest extends SapphireTest
 {
+
     protected $usesDatabase = true;
 
     protected static $extra_dataobjects = [
@@ -56,13 +57,13 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Test Page'],
+            ],
+        ];
 
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-
-        $pageData = $parsed[MockPage::class][$page->ID];
-        $this->assertSame('Test Page', $pageData['Title']);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testHasOneRelationship(): void
@@ -79,17 +80,20 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        // Image is a dependency of Page, so it appears first
+        $expected = [
+            MockImage::class => [
+                $image->ID => ['Name' => 'test-image.jpg'],
+            ],
+            MockPage::class => [
+                $page->ID => [
+                    'Title' => 'Page With Image',
+                    'Image' => sprintf('=>%s.%s', MockImage::class, $image->ID),
+                ],
+            ],
+        ];
 
-        // Both classes should be present
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockImage::class, $parsed);
-
-        // The page should reference the image using fixture syntax
-        $pageData = $parsed[MockPage::class][$page->ID];
-        $expectedRef = sprintf('=>%s.%s', MockImage::class, $image->ID);
-        $this->assertSame($expectedRef, $pageData['Image']);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testHasManyRelationship(): void
@@ -107,18 +111,21 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        // Page is a dependency of Element (via has_one), so Page appears first
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Page With Elements'],
+            ],
+            MockElement::class => [
+                $element->ID => [
+                    'Title' => 'Element 1',
+                    'Sort' => 1,
+                    'Parent' => sprintf('=>%s.%s', MockPage::class, $page->ID),
+                ],
+            ],
+        ];
 
-        // Both classes should appear
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockElement::class, $parsed);
-
-        // The element should have a has_one reference back to the page
-        $elementData = $parsed[MockElement::class][$element->ID];
-        $expectedRef = sprintf('=>%s.%s', MockPage::class, $page->ID);
-        $this->assertSame($expectedRef, $elementData['Parent']);
-        $this->assertSame('Element 1', $elementData['Title']);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testManyManyRelationship(): void
@@ -141,17 +148,27 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $parsed = Yaml::parse($service->outputFixture());
 
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockTag::class, $parsed);
+        // MockPage and MockTag are independent (no has_one edge), so their relative order
+        // depends on the topological sort's processing order. Build expected to match.
+        $expected = [
+            MockTag::class => [
+                $tag1->ID => ['Title' => 'Tag A'],
+                $tag2->ID => ['Title' => 'Tag B'],
+            ],
+            MockPage::class => [
+                $page->ID => [
+                    'Title' => 'Page With Tags',
+                    'Tags' => [
+                        sprintf('=>%s.%s', MockTag::class, $tag1->ID),
+                        sprintf('=>%s.%s', MockTag::class, $tag2->ID),
+                    ],
+                ],
+            ],
+        ];
 
-        // The page record should have Tags as an array of references
-        $pageData = $parsed[MockPage::class][$page->ID];
-        $this->assertIsArray($pageData['Tags']);
-        $this->assertContains(sprintf('=>%s.%s', MockTag::class, $tag1->ID), $pageData['Tags']);
-        $this->assertContains(sprintf('=>%s.%s', MockTag::class, $tag2->ID), $pageData['Tags']);
+        $this->assertSame($expected, $parsed);
     }
 
     public function testManyManyThroughRelationship(): void
@@ -169,11 +186,23 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $parsed = Yaml::parse($service->outputFixture());
 
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockThroughTarget::class, $parsed);
+        $expected = [
+            MockThroughTarget::class => [
+                $target->ID => ['Title' => 'Through Target'],
+            ],
+            MockPage::class => [
+                $page->ID => [
+                    'Title' => 'Page With Through',
+                    'ThroughTargets' => [
+                        sprintf('=>%s.%s', MockThroughTarget::class, $target->ID),
+                    ],
+                ],
+            ],
+        ];
+
+        $this->assertSame($expected, $parsed);
     }
 
     public function testExcludeFromFixtureRelationships(): void
@@ -185,14 +214,13 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($excluded);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $expected = [
+            MockExcludedObject::class => [
+                $excluded->ID => ['Title' => 'Excluded'],
+            ],
+        ];
 
-        // The excluded object itself should still appear in the fixture when directly added
-        $this->assertArrayHasKey(MockExcludedObject::class, $parsed);
-
-        $recordData = $parsed[MockExcludedObject::class][$excluded->ID];
-        $this->assertSame('Excluded', $recordData['Title']);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testExcludedFixtureRelationships(): void
@@ -209,13 +237,14 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        // Only the page — image is excluded via excluded_fixture_relationships
+        $expected = [
+            MockPageWithExclusions::class => [
+                $page->ID => ['Title' => 'Page With Excluded Relations'],
+            ],
+        ];
 
-        // The page should be in the fixture
-        $this->assertArrayHasKey(MockPageWithExclusions::class, $parsed);
-        // But the image should NOT be traversed (it's excluded via excluded_fixture_relationships)
-        $this->assertArrayNotHasKey(MockImage::class, $parsed);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testPolymorphicHasOneWithFieldClassnameMap(): void
@@ -233,15 +262,19 @@ class FixtureServiceTest extends SapphireTest
         $service = new FixtureService();
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $expected = [
+            MockImage::class => [
+                $image->ID => ['Name' => 'polymorphic-image.jpg'],
+            ],
+            MockPolymorphicPage::class => [
+                $page->ID => [
+                    'Title' => 'Polymorphic Page',
+                    'PolymorphicHasOne' => sprintf('=>%s.%s', MockImage::class, $image->ID),
+                ],
+            ],
+        ];
 
-        // Both classes should appear
-        $this->assertArrayHasKey(MockPolymorphicPage::class, $parsed);
-        $this->assertArrayHasKey(MockImage::class, $parsed);
-
-        $imageData = $parsed[MockImage::class][$image->ID];
-        $this->assertSame('polymorphic-image.jpg', $imageData['Name']);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testPolymorphicHasOneWithoutClassnameThrowsException(): void
@@ -265,6 +298,48 @@ class FixtureServiceTest extends SapphireTest
         $service->addDataObject($page);
     }
 
+    public function testHasOneSkipsWhenNoValue(): void
+    {
+        $page = MockPage::create();
+        $page->Title = 'No Image';
+        // ImageID is 0 / not set — hasValue() returns false, so the has_one should be skipped
+        $page->write();
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'No Image'],
+            ],
+        ];
+
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
+    }
+
+    public function testHasOneWarnsWhenRelatedObjectNotFound(): void
+    {
+        // Create and delete an image so we have an ID that no longer exists
+        $image = MockImage::create();
+        $image->Name = 'deleted.jpg';
+        $image->write();
+        $deletedId = $image->ID;
+        $image->delete();
+
+        $page = MockPage::create();
+        $page->Title = 'Dangling Reference';
+        $page->ImageID = $deletedId;
+        $page->write();
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $this->assertSame(
+            [sprintf('Related Object "ImageID" found on "%s" was not a DataObject', MockPage::class)],
+            $service->getWarnings()
+        );
+    }
+
     public function testAddDataObjectProcessesRelatedObjectsViaStack(): void
     {
         // Create a chain: Page -> Image (via has_one) and Page -> Element (via has_many)
@@ -286,18 +361,29 @@ class FixtureServiceTest extends SapphireTest
         // Only add the page — related objects should be pulled in automatically
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $parsed = Yaml::parse($service->outputFixture());
 
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockImage::class, $parsed);
-        $this->assertArrayHasKey(MockElement::class, $parsed);
+        // Image has no deps, Page depends on Image, Element depends on Page
+        $expected = [
+            MockImage::class => [
+                $image->ID => ['Name' => 'chain-image.jpg'],
+            ],
+            MockPage::class => [
+                $page->ID => [
+                    'Title' => 'Chain Page',
+                    'Image' => sprintf('=>%s.%s', MockImage::class, $image->ID),
+                ],
+            ],
+            MockElement::class => [
+                $element->ID => [
+                    'Title' => 'Chain Element',
+                    'Sort' => 0,
+                    'Parent' => sprintf('=>%s.%s', MockPage::class, $page->ID),
+                ],
+            ],
+        ];
 
-        $imageData = $parsed[MockImage::class][$image->ID];
-        $this->assertSame('chain-image.jpg', $imageData['Name']);
-
-        $elementData = $parsed[MockElement::class][$element->ID];
-        $this->assertSame('Chain Element', $elementData['Title']);
+        $this->assertSame($expected, $parsed);
     }
 
     public function testAddDataObjectDoesNotDuplicateRecords(): void
@@ -310,27 +396,13 @@ class FixtureServiceTest extends SapphireTest
         $service->addDataObject($page);
         $service->addDataObject($page);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Unique Page'],
+            ],
+        ];
 
-        // Only one record for this page
-        $this->assertCount(1, $parsed[MockPage::class]);
-    }
-
-    public function testOutputFixtureProducesValidYaml(): void
-    {
-        $page = MockPage::create();
-        $page->Title = 'YAML Test';
-        $page->write();
-
-        $service = new FixtureService();
-        $service->addDataObject($page);
-
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
-
-        $this->assertIsArray($parsed);
-        $this->assertArrayHasKey(MockPage::class, $parsed);
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
     public function testGetWarningsReturnsEmptyByDefault(): void
@@ -353,11 +425,10 @@ class FixtureServiceTest extends SapphireTest
         $method->invoke($service, 'Same warning');
         $method->invoke($service, 'Different warning');
 
-        $warnings = $service->getWarnings();
-
-        $this->assertCount(2, $warnings);
-        $this->assertSame('Same warning', $warnings[0]);
-        $this->assertSame('Different warning', $warnings[1]);
+        $this->assertSame(
+            ['Same warning', 'Different warning'],
+            $service->getWarnings()
+        );
     }
 
     public function testMultipleDataObjectsAcrossClasses(): void
@@ -379,16 +450,20 @@ class FixtureServiceTest extends SapphireTest
         $service->addDataObject($page2);
         $service->addDataObject($image);
 
-        $output = $service->outputFixture();
-        $parsed = Yaml::parse($output);
+        $parsed = Yaml::parse($service->outputFixture());
 
-        // Both classes should be present
-        $this->assertArrayHasKey(MockPage::class, $parsed);
-        $this->assertArrayHasKey(MockImage::class, $parsed);
+        // MockPage and MockImage are independent — build expected matching the actual order
+        $expected = [
+            MockImage::class => [
+                $image->ID => ['Name' => 'standalone.jpg'],
+            ],
+            MockPage::class => [
+                $page1->ID => ['Title' => 'Page One'],
+                $page2->ID => ['Title' => 'Page Two'],
+            ],
+        ];
 
-        // Both pages should be represented
-        $pageRecords = $parsed[MockPage::class];
-        $this->assertCount(2, $pageRecords);
+        $this->assertSame($expected, $parsed);
     }
 
     public function testFixtureOutputOrderReflectsDependencies(): void
@@ -416,4 +491,5 @@ class FixtureServiceTest extends SapphireTest
         $this->assertNotFalse($pagePos);
         $this->assertLessThan($pagePos, $imagePos);
     }
+
 }
