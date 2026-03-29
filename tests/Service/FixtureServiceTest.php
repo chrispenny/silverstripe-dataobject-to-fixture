@@ -8,12 +8,12 @@ use ChrisPenny\DataObjectToFixture\Tests\Mocks\Models\MockExcludedObject;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Models\MockImage;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Models\MockTag;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Models\MockThroughTarget;
+use ChrisPenny\DataObjectToFixture\Tests\Mocks\Pages\MockNativePoly;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Pages\MockPage;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Pages\MockPageWithExclusions;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Pages\MockPolymorphicPage;
 use ChrisPenny\DataObjectToFixture\Tests\Mocks\Relations\MockThroughObject;
 use Exception;
-use InvalidArgumentException;
 use SilverStripe\Dev\SapphireTest;
 use Symfony\Component\Yaml\Yaml;
 
@@ -35,6 +35,7 @@ class FixtureServiceTest extends SapphireTest
         MockThroughTarget::class,
         MockThroughObject::class,
         MockExcludedObject::class,
+        MockNativePoly::class,
     ];
 
     public function testAddDataObjectThrowsExceptionWhenNotInDb(): void
@@ -277,7 +278,7 @@ class FixtureServiceTest extends SapphireTest
         $this->assertSame($expected, Yaml::parse($service->outputFixture()));
     }
 
-    public function testPolymorphicHasOneWithoutClassnameThrowsException(): void
+    public function testPolymorphicHasOneWithoutClassnameWarns(): void
     {
         $image = MockImage::create();
         $image->Name = 'no-map-image.jpg';
@@ -286,16 +287,51 @@ class FixtureServiceTest extends SapphireTest
         $page = MockPolymorphicPage::create();
         $page->Title = 'Unmapped Polymorphic';
         $page->PolymorphicHasOneID = $image->ID;
-        // Don't set PolymorphicHasOneClass — the map resolves to empty string
+        // Don't set PolymorphicHasOneClass — the map resolves to empty/null
         $page->write();
 
         $service = new FixtureService();
-
-        // When the field_classname_map resolves to an empty/invalid class name, Silverstripe throws
-        // an InvalidArgumentException from DataObject::get()
-        $this->expectException(InvalidArgumentException::class);
-
         $service->addDataObject($page);
+
+        $this->assertSame(
+            [sprintf(
+                'field_classname_map for "PolymorphicHasOneID" in "%s" did not resolve to a valid class name',
+                MockPolymorphicPage::class
+            )],
+            $service->getWarnings()
+        );
+    }
+
+    public function testArrayFormatPolymorphicHasOne(): void
+    {
+        $image = MockImage::create();
+        $image->Name = 'native-poly.jpg';
+        $image->write();
+
+        $page = MockNativePoly::create();
+        $page->Title = 'Native Polymorphic';
+        $page->OwnerID = $image->ID;
+        $page->OwnerClass = MockImage::class;
+        $page->write();
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $parsed = Yaml::parse($service->outputFixture());
+
+        $expected = [
+            MockImage::class => [
+                $image->ID => ['Name' => 'native-poly.jpg'],
+            ],
+            MockNativePoly::class => [
+                $page->ID => [
+                    'Title' => 'Native Polymorphic',
+                    'Owner' => sprintf('=>%s.%s', MockImage::class, $image->ID),
+                ],
+            ],
+        ];
+
+        $this->assertSame($expected, $parsed);
     }
 
     public function testHasOneSkipsWhenNoValue(): void

@@ -231,6 +231,23 @@ class FixtureService
         }
 
         foreach ($hasOneRelationships as $relationName => $relationClassName) {
+            // Polymorphic has_one relationships can be defined as arrays, eg:
+            // ['class' => DataObject::class, 'type' => 'polymorphic']
+            // Extract the class name so the rest of the method can treat it as a string
+            if (is_array($relationClassName)) {
+                $relationClassName = $relationClassName['class'] ?? null;
+
+                if ($relationClassName === null) {
+                    $this->addWarning(sprintf(
+                        'Polymorphic relationship "%s" in class "%s" has no "class" key defined',
+                        $relationName,
+                        $dataObject->ClassName
+                    ));
+
+                    continue;
+                }
+            }
+
             // Relationship field names (as represented in the Database) are always appended with `ID`
             $relationFieldName = sprintf('%sID', $relationName);
             // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
@@ -240,6 +257,16 @@ class FixtureService
             // Apply the map that has been specified
             if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
                 $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
+
+                if (!is_string($relationClassName) || $relationClassName === '') {
+                    $this->addWarning(sprintf(
+                        'field_classname_map for "%s" in "%s" did not resolve to a valid class name',
+                        $relationFieldName,
+                        $dataObject->ClassName
+                    ));
+
+                    continue;
+                }
             }
 
             // Check to see if class has requested that it not be included in relationship maps
