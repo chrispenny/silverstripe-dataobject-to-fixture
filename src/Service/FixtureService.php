@@ -570,14 +570,6 @@ class FixtureService
             $relatedObjects = $dataObject->relField($relationFieldName);
 
             foreach ($relatedObjects as $relatedObject) {
-                // Check to see if this class has requested that it not be included in relationship maps
-                $excludeClass = Config::inst()->get($relatedObject->ClassName, 'exclude_from_fixture_relationships');
-
-                // Yup, exclude this class
-                if ($excludeClass) {
-                    continue;
-                }
-
                 // Add the related DataObject as one of our resolved relationships
                 $resolvedRelationships[] = sprintf('=>%s.%s', $relatedObject->ClassName, $relatedObject->ID);
 

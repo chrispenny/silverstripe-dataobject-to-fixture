@@ -172,6 +172,84 @@ class FixtureServiceTest extends SapphireTest
         $this->assertSame($expected, $parsed);
     }
 
+    public function testManyManyTagExcludeFromFixtureRelationships(): void
+    {
+        MockTag::config()->set('exclude_from_fixture_relationships', true);
+
+        $page = MockPage::create();
+        $page->Title = 'Page Excluding Tags';
+        $page->write();
+
+        $tag = MockTag::create();
+        $tag->Title = 'Excluded Tag';
+        $tag->write();
+
+        $page->Tags()->add($tag);
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Page Excluding Tags'],
+            ],
+        ];
+
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
+    }
+
+    public function testManyManyPageExcludedFromFixtureRelationships(): void
+    {
+        MockPage::config()->set('excluded_fixture_relationships', ['Tags']);
+
+        $page = MockPage::create();
+        $page->Title = 'Page Excluding Tags Relation';
+        $page->write();
+
+        $tag = MockTag::create();
+        $tag->Title = 'Excluded Via Relation';
+        $tag->write();
+
+        $page->Tags()->add($tag);
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Page Excluding Tags Relation'],
+            ],
+        ];
+
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
+    }
+
+    public function testManyManyThroughExcludedFixtureRelationships(): void
+    {
+        MockPage::config()->set('excluded_fixture_relationships', ['ThroughTargets']);
+
+        $page = MockPage::create();
+        $page->Title = 'Page Excluding Through';
+        $page->write();
+
+        $target = MockThroughTarget::create();
+        $target->Title = 'Excluded Through Target';
+        $target->write();
+
+        $page->ThroughTargets()->add($target);
+
+        $service = new FixtureService();
+        $service->addDataObject($page);
+
+        $expected = [
+            MockPage::class => [
+                $page->ID => ['Title' => 'Page Excluding Through'],
+            ],
+        ];
+
+        $this->assertSame($expected, Yaml::parse($service->outputFixture()));
+    }
+
     public function testManyManyThroughRelationship(): void
     {
         $page = MockPage::create();
