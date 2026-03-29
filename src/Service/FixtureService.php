@@ -419,6 +419,28 @@ class FixtureService
                 continue;
             }
 
+            // Relationships are sometimes defined as ClassName.FieldName. Drop the .FieldName
+            $cleanRelationshipClassName = strtok($relationClassName, '.');
+
+            // Check to see if this class has requested that it not be included in relationship maps
+            $excludeClass = Config::inst()->get($cleanRelationshipClassName, 'exclude_from_fixture_relationships');
+
+            // Yup, exclude this class
+            if ($excludeClass) {
+                continue;
+            }
+
+            // Check to see if this particular relationship wants to be excluded
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $relationFieldName
+            );
+
+            // Yup, exclude this relationship
+            if ($excludeRelationship) {
+                continue;
+            }
+
             // TL;DR: many_many is really tough. Developers could choose to define it only in one direction, or in
             // both directions, and they could choose to define it either with, or without dot notation in either
             // direction
@@ -494,6 +516,17 @@ class FixtureService
         foreach ($manyManyRelationships as $relationFieldName => $relationshipValue) {
             // This many_many relationship does not contain "through" information, so we don't want to process this here
             if (!is_array($relationshipValue) || !array_key_exists('through', $relationshipValue)) {
+                continue;
+            }
+
+            // Check to see if this particular relationship wants to be excluded
+            $excludeRelationship = $this->relationshipManifest->shouldExcludeRelationship(
+                $dataObject->ClassName,
+                $relationFieldName
+            );
+
+            // Yup, exclude this relationship
+            if ($excludeRelationship) {
                 continue;
             }
 
