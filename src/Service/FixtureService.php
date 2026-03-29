@@ -231,11 +231,23 @@ class FixtureService
         }
 
         foreach ($hasOneRelationships as $relationName => $relationClassName) {
-            $relationClassName = $this->handlePolymorphicRelationship($relationName, $relationClassName, $dataObject);
-            if ($relationClassName === null) {
-                continue;
+            // Polymorphic has_one relationships can be defined as arrays, eg:
+            // ['class' => DataObject::class, 'type' => 'polymorphic']
+            // Extract the class name so the rest of the method can treat it as a string
+            if (is_array($relationClassName)) {
+                $relationClassName = $relationClassName['class'] ?? null;
+
+                if ($relationClassName === null) {
+                    $this->addWarning(sprintf(
+                        'Polymorphic relationship "%s" in class "%s" has no "class" key defined',
+                        $relationName,
+                        $dataObject->ClassName
+                    ));
+
+                    continue;
+                }
             }
-            
+
             // Relationship field names (as represented in the Database) are always appended with `ID`
             $relationFieldName = sprintf('%sID', $relationName);
             // field_classname_map provides devs with the opportunity to describe polymorphic relationships (see the
@@ -245,15 +257,14 @@ class FixtureService
             // Apply the map that has been specified
             if ($fieldClassNameMap !== null && array_key_exists($relationFieldName, $fieldClassNameMap)) {
                 $relationClassName = $dataObject->relField($fieldClassNameMap[$relationFieldName]);
-                
-                // Ensure we have a valid class name string
-                if (!is_string($relationClassName) || empty($relationClassName)) {
+
+                if (!is_string($relationClassName) || $relationClassName === '') {
                     $this->addWarning(sprintf(
-                        'field_classname_map for field "%s" in class "%s" returned invalid class name: %s',
+                        'field_classname_map for "%s" in "%s" did not resolve to a valid class name',
                         $relationFieldName,
-                        $dataObject->ClassName,
-                        is_array($relationClassName) ? 'array' : gettype($relationClassName)
+                        $dataObject->ClassName
                     ));
+
                     continue;
                 }
             }
@@ -329,48 +340,6 @@ class FixtureService
             // Add the related DataObject to the stack to be processed
             $this->dataObjectStack[] = $relatedObject;
         }
-    }
-
-    /**
-     * Handle polymorphic relationship configurations where the relationship class is defined as an array
-     *
-     * @param string $relationName The name of the relationship
-     * @param string|array $relationClassName The class name or polymorphic configuration array
-     * @param DataObject $dataObject The data object being processed
-     * @return string|null The resolved class name, or null if the relationship should be skipped
-     */
-    private function handlePolymorphicRelationship(string $relationName, string|array $relationClassName, DataObject $dataObject): ?string
-    {
-        // If it's already a string, no processing needed
-        if (is_string($relationClassName)) {
-            return $relationClassName;
-        }
-
-        // Handle polymorphic relationships where relationClassName is an array
-        if (is_array($relationClassName)) {
-            // For polymorphic relationships, get the base class
-            if (isset($relationClassName['class'])) {
-                return $relationClassName['class'];
-            } else {
-                $this->addWarning(sprintf(
-                    'Polymorphic relationship "%s" in class "%s" has invalid configuration: %s',
-                    $relationName,
-                    $dataObject->ClassName,
-                    json_encode($relationClassName, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES, 2)
-                ));
-                return null;
-            }
-        }
-
-        // If it's neither string nor array, something's wrong
-        $this->addWarning(sprintf(
-            'Relationship "%s" in class "%s" has unexpected type "%s": %s',
-            $relationName,
-            $dataObject->ClassName,
-            gettype($relationClassName),
-            json_encode($relationClassName, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES, 2)
-        ));
-        return null;
     }
 
     /**
