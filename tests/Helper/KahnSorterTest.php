@@ -10,7 +10,7 @@ use SilverStripe\Dev\SapphireTest;
  *
  * @phpcs:disable
  */
-class KhanSorterTest extends SapphireTest
+class KahnSorterTest extends SapphireTest
 {
 
     public function testSorter(): void
