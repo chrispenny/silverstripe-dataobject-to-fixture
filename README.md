@@ -246,8 +246,8 @@ method.
 
 ## Fluent support
 
-It is my intention to support Fluent and exporting Localised fields in the future, but at this time, there is no
-support provided.
+I would like to add Fluent support, but realistically, I don't have the time to do so at the moment. If anyone has the
+capacity to add Fluent support, I would be happy to review and merge a PR for that.
 
 ## Future features
 

@@ -4,12 +4,15 @@ namespace ChrisPenny\DataObjectToFixture\Task;
 
 use ChrisPenny\DataObjectToFixture\Service\FixtureService;
 use Exception;
-use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\BuildTask;
+use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\PaginatedList;
+use SilverStripe\PolyExecution\PolyOutput;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Throwable;
 
 /**
@@ -18,19 +21,15 @@ use Throwable;
 class GenerateFixtureFromDataObject extends BuildTask
 {
 
-    protected $title = 'Generate Fixture From DataObject'; // phpcs:ignore
+    protected static string $commandName = 'generate-fixture-from-dataobject';
 
-    protected $description = 'Generate a text fixture from a DataObject in your Database'; // phpcs:ignore
+    protected string $title = 'Generate Fixture From DataObject';
 
-    private static string $segment = 'generate-fixture-from-dataobject'; // phpcs:ignore
+    protected static string $description = 'Generate a text fixture from a DataObject in your Database';
 
     private ?int $previousExecution = null;
 
-    /**
-     * @param HTTPRequest|mixed $request
-     * @throws Exception
-     */
-    public function run($request): void // phpcs:ignore
+    protected function execute(InputInterface $input, PolyOutput $output): int
     {
         try {
             $this->previousExecution = ini_get('max_execution_time');
@@ -38,22 +37,22 @@ class GenerateFixtureFromDataObject extends BuildTask
 
             $this->outputStyles();
 
-            $className = $request->getVar('ClassName');
-            $id = $request->getVar('ID');
+            $className = $input->getOption('ClassName');
+            $id = $input->getOption('ID');
 
             // We have both a ClassName and ID, which means we can render out the fixture for a particular record
             if ($className && $id) {
-                $this->outputFixture($request, $className, (int)$id);
+                $this->outputFixture($className, (int) $id);
 
-                return;
+                return Command::SUCCESS;
             }
 
             // We have a ClassName, but not ID yet, this means the user needs to be provided with a list of available
             // records for that particular class
             if ($className) {
-                $this->outputClassForm($request, $className);
+                $this->outputClassForm($input, $className);
 
-                return;
+                return Command::SUCCESS;
             }
 
             // The initial form is a list of available classes
@@ -62,6 +61,8 @@ class GenerateFixtureFromDataObject extends BuildTask
             throw $e;
         } finally {
             ini_set('max_execution_time', $this->previousExecution);
+
+            return Command::SUCCESS;
         }
     }
 
@@ -100,10 +101,10 @@ class GenerateFixtureFromDataObject extends BuildTask
         echo '</form>';
     }
 
-    protected function outputClassForm(HTTPRequest $request, string $className): void
+    protected function outputClassForm(InputInterface $input, string $className): void
     {
         $dbFields = Config::inst()->get($className, 'db');
-        $start = $request->getVar('start') ?? 0;
+        $start = $input->getOption('start') ?? 0;
 
         /** @var PaginatedList|DataObject[] $paginatedList */
         $paginatedList = PaginatedList::create($className::get());
@@ -117,7 +118,10 @@ class GenerateFixtureFromDataObject extends BuildTask
             return;
         }
 
-        echo '<p><a href="/dev/tasks/generate-fixture-from-dataobject">< Back to the beginning</a></p>';
+        echo sprintf(
+            '<p><a href="/dev/tasks/%s">< Back to the beginning</a></p>',
+            self::$commandName
+        );
 
         echo '<div class="pagination">';
         echo '<p><strong>Pagination:</strong></p>';
@@ -149,7 +153,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         // Remove Datatime and Boolean fields, as they're (likely) not that useful for trying to find a specific record
         $dbFields = array_diff($dbFields, ['Datetime', 'Boolean']);
-        $linkTemplate = '<td><a href="/dev/tasks/generate-fixture-from-dataobject?ClassName=%s&ID=%s">Link</a></td>';
+        $linkTemplate = '<td><a href="/dev/tasks/%s?ClassName=%s&ID=%s">Link</a></td>';
 
         echo '<table>';
         echo '<thead>';
@@ -168,7 +172,7 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         foreach ($paginatedList as $dataObject) {
             echo '<tr>';
-            echo sprintf($linkTemplate, $className, $dataObject->ID);
+            echo sprintf($linkTemplate, self::$commandName, $className, $dataObject->ID);
             echo sprintf('<td>%s</td>', $dataObject->ID);
 
             foreach (array_keys($dbFields) as $fieldName) {
@@ -184,12 +188,9 @@ class GenerateFixtureFromDataObject extends BuildTask
     }
 
     /**
-     * @param HTTPRequest $request
-     * @param string $className
-     * @param int $id
      * @throws Exception
      */
-    protected function outputFixture(HTTPRequest $request, string $className, int $id): void
+    protected function outputFixture(string $className, int $id): void
     {
         if (!$className) {
             echo '<p>No ClassName provided</p>';
@@ -208,6 +209,11 @@ class GenerateFixtureFromDataObject extends BuildTask
 
         if ($dataObject === null) {
             echo sprintf('<p>DataObject not found. ClassName: %s, ID: %s</p>', $className, $id);
+            echo sprintf(
+                '<p><a href="/dev/tasks/%s?ClassName=%s">< Back to list of records</a></p>',
+                self::$commandName,
+                $className
+            );
 
             return;
         }
@@ -220,7 +226,8 @@ class GenerateFixtureFromDataObject extends BuildTask
         }
 
         echo sprintf(
-            '<p><a href="/dev/tasks/generate-fixture-from-dataobject?ClassName=%s">< Back to list of records</a></p>',
+            '<p><a href="/dev/tasks/%s?ClassName=%s">< Back to list of records</a></p>',
+            self::$commandName,
             $className
         );
 
@@ -346,6 +353,30 @@ tbody tr:nth-child(even) {
 CSS;
 
         echo '</style>';
+    }
+
+    public function getOptions(): array
+    {
+        return [
+            new InputOption(
+                'ClassName',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Specify class of the DataObject to be exported'
+            ),
+            new InputOption(
+                'ID',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Specify the ID of the DataObject to be exported'
+            ),
+            new InputOption(
+                'start',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Pagination value'
+            ),
+        ];
     }
 
 }
