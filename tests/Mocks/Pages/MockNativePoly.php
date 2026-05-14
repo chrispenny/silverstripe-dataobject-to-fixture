@@ -6,7 +6,7 @@ use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 
 /**
- * Uses the Silverstripe 5 array-format polymorphic has_one definition.
+ * Uses the Silverstripe array-format polymorphic has_one definition.
  *
  * @property string $Title
  * @property int $OwnerID
